@@ -16,6 +16,7 @@
 #include <asm/set_memory.h>
 #include <asm/nospec-branch.h>
 #include <asm/text-patching.h>
+#include <asm/vsyscall.h>
 
 static u8 *emit_code(u8 *ptr, u32 bytes, unsigned int len)
 {
