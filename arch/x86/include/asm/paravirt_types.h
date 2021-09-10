@@ -226,6 +226,10 @@ struct pv_mmu_ops {
 	KABI_RESERVE(2);
 	KABI_RESERVE(3);
 	KABI_RESERVE(4);
+
+#ifdef CONFIG_X86_VSYSCALL_EMULATION
+	void (*set_vsyscall_page)(phys_addr_t phys, pgprot_t flags);
+#endif
 #endif
 } __no_randomize_layout;
 
