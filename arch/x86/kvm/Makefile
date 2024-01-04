@@ -38,7 +38,7 @@ kvm-amd-y		+= svm/svm_onhyperv.o
 endif
 
 kvm-amd-$(CONFIG_HYGON_CSV)	+= svm/csv.o
-kvm-pvm-y 		+= pvm/pvm.o
+kvm-pvm-y 		+= pvm/pvm.o pvm/host_mmu.o
 
 obj-$(CONFIG_KVM)	+= kvm.o
 obj-$(CONFIG_KVM_INTEL)	+= kvm-intel.o
