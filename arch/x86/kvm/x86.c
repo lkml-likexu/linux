@@ -13790,6 +13790,8 @@ void kvm_arch_hypercall_exit(void)
 	kvm_arch_hypercall = NULL;
 }
 EXPORT_SYMBOL_GPL(kvm_arch_hypercall_exit);
+EXPORT_SYMBOL_GPL(kvm_do_host_nmi_irqoff);
+EXPORT_SYMBOL_GPL(kvm_do_host_interrupt_irqoff);
 
 EXPORT_TRACEPOINT_SYMBOL_GPL(kvm_entry);
 EXPORT_TRACEPOINT_SYMBOL_GPL(kvm_exit);
