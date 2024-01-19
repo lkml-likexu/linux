@@ -28,6 +28,7 @@
 
 #include <asm/setup.h>
 #include <asm/kaslr.h>
+#include <asm/pvm_para.h>
 
 #include "mm_internal.h"
 
@@ -95,6 +96,9 @@ void __init kernel_randomize_memory(void)
 
 	/* Preset the end of the possible address space for physical memory */
 	physmem_end = ((1ULL << MAX_PHYSMEM_BITS) - 1);
+	if (pvm_kernel_layout_relocate())
+		return;
+
 	if (!kaslr_memory_enabled())
 		return;
 
