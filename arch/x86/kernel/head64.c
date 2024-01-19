@@ -43,6 +43,7 @@
 #include <asm/tdx.h>
 #include <asm/init.h>
 #include <asm/csv.h>
+#include <asm/pvm_para.h>
 
 /*
  * Manage page tables very early on.
@@ -395,6 +396,8 @@ asmlinkage __visible void __init __noreturn x86_64_start_kernel(char * real_mode
 	__native_tlb_flush_global(this_cpu_read(cpu_tlbstate.cr4));
 
 	idt_setup_early_handler();
+
+	pvm_early_setup();
 
 	/* Needed before cc_platform_has() can be used for TDX */
 	tdx_early_init();
