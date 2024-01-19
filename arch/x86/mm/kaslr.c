@@ -38,7 +38,7 @@
  * highest amount of space for randomization available, but that's too hard
  * to keep straight and caused issues already.
  */
-static const unsigned long vaddr_end = CPU_ENTRY_AREA_BASE;
+static const unsigned long vaddr_end = RAW_CPU_ENTRY_AREA_BASE;
 
 /*
  * Memory regions randomized by KASLR (except modules that use a separate logic
@@ -90,7 +90,7 @@ void __init kernel_randomize_memory(void)
 	 * limited....
 	 */
 	BUILD_BUG_ON(vaddr_start >= vaddr_end);
-	BUILD_BUG_ON(vaddr_end != CPU_ENTRY_AREA_BASE);
+	BUILD_BUG_ON(vaddr_end != RAW_CPU_ENTRY_AREA_BASE);
 	BUILD_BUG_ON(vaddr_end > __START_KERNEL_map);
 
 	/* Preset the end of the possible address space for physical memory */
