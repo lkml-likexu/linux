@@ -1598,6 +1598,19 @@ struct bpf_struct_ops_value;
 struct btf_member;
 
 #define BPF_STRUCT_OPS_MAX_NR_MEMBERS 64
+/* Every member of a struct_ops type has an instance even a member is not
+ * an operator (function pointer). The "info" field will be assigned to
+ * prog->aux->ctx_arg_info of BPF struct_ops programs to provide the
+ * argument information required by the verifier to verify the program.
+ *
+ * btf_ctx_access() will lookup prog->aux->ctx_arg_info to find the
+ * corresponding entry for an given argument.
+ */
+struct bpf_struct_ops_arg_info {
+	struct bpf_ctx_arg_aux *info;
+	u32 cnt;
+};
+
 /**
  * struct bpf_struct_ops - A structure of callbacks allowing a subsystem to
  *			   define a BPF_MAP_TYPE_STRUCT_OPS map type composed
@@ -1644,6 +1657,7 @@ struct btf_member;
  * @func_models: Func models
  * @type_id: BTF type id.
  * @value_id: BTF value id.
+ * @arg_info: Collection of argument information for each member
  */
 struct bpf_struct_ops {
 	const struct bpf_verifier_ops *verifier_ops;
@@ -1664,12 +1678,16 @@ struct bpf_struct_ops {
 	struct btf_func_model func_models[BPF_STRUCT_OPS_MAX_NR_MEMBERS];
 	u32 type_id;
 	u32 value_id;
+
+	/* Collection of argument information for each member */
+	struct bpf_struct_ops_arg_info *arg_info;
 };
 
 #if defined(CONFIG_BPF_JIT) && defined(CONFIG_BPF_SYSCALL)
 #define BPF_MODULE_OWNER ((void *)((0xeB9FUL << 2) + POISON_POINTER_DELTA))
 const struct bpf_struct_ops *bpf_struct_ops_find(u32 type_id);
 void bpf_struct_ops_init(struct btf *btf, struct bpf_verifier_log *log);
+void bpf_struct_ops_release(struct bpf_struct_ops *st_ops);
 bool bpf_struct_ops_get(const void *kdata);
 void bpf_struct_ops_put(const void *kdata);
 int bpf_struct_ops_map_sys_lookup_elem(struct bpf_map *map, void *key,
@@ -1710,6 +1728,7 @@ struct bpf_dummy_ops {
 int bpf_struct_ops_test_run(struct bpf_prog *prog, const union bpf_attr *kattr,
 			    union bpf_attr __user *uattr);
 #endif
+
 #else
 static inline const struct bpf_struct_ops *bpf_struct_ops_find(u32 type_id)
 {
@@ -1719,6 +1738,10 @@ static inline void bpf_struct_ops_init(struct btf *btf,
 				       struct bpf_verifier_log *log)
 {
 }
+static inline void bpf_struct_ops_release(struct bpf_struct_ops *st_ops)
+{
+}
+
 static inline bool bpf_try_module_get(const void *data, struct module *owner)
 {
 	return try_module_get(owner);
