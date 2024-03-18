@@ -3,6 +3,7 @@
 #define _UAPI_ASM_X86_PVM_PARA_H
 
 #include <linux/const.h>
+#include <linux/types.h>
 
 /*
  * The CPUID instruction in PVM guest can't be trapped and emulated,
@@ -90,26 +91,26 @@ struct pvm_vcpu_struct {
 	 * This flag is only used in supervisor mode, with only bit 8 and
 	 * bit 9 being valid. The other bits are reserved.
 	 */
-	u64 event_flags;
-	u32 event_errcode;
-	u32 event_vector;
-	u64 cr2;
-	u64 reserved0[5];
+	__u64 event_flags;
+	__u32 event_errcode;
+	__u32 event_vector;
+	__u64 cr2;
+	__u64 reserved0[5];
 
 	/*
 	 * For the event from supervisor mode with vector >=32, only eflags,
 	 * rip, rsp, rcx and r11 are saved, and others keep untouched.
 	 */
-	u16 user_cs, user_ss;
-	u32 reserved1;
-	u64 reserved2;
-	u64 user_gsbase;
-	u32 eflags;
-	u32 pkru;
-	u64 rip;
-	u64 rsp;
-	u64 rcx;
-	u64 r11;
+	__u16 user_cs, user_ss;
+	__u32 reserved1;
+	__u64 reserved2;
+	__u64 user_gsbase;
+	__u32 eflags;
+	__u32 pkru;
+	__u64 rip;
+	__u64 rsp;
+	__u64 rcx;
+	__u64 r11;
 };
 
 /*
@@ -119,7 +120,8 @@ struct pvm_vcpu_struct {
  * with the following frame format from the stack to restore the old context.
  */
 struct pvm_supervisor_event {
-	unsigned long errcode; // vector in high32
+	/* vector in high32 */
+	unsigned long errcode;
 	unsigned long rip;
 	unsigned long cs;
 	unsigned long rflags;
