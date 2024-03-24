@@ -875,10 +875,10 @@ static void pvm_patch_hypercall(struct kvm_vcpu *vcpu, unsigned char *hypercall)
 	hypercall[2] = 0xCC;
 }
 
-static int pvm_check_emulate_instruction(struct kvm_vcpu *vcpu, int emul_type,
-					 void *insn, int insn_len)
+static bool pvm_check_emulate_instruction(struct kvm_vcpu *vcpu, int emul_type,
+					  void *insn, int insn_len)
 {
-	return X86EMUL_CONTINUE;
+	return true;
 }
 
 static int skip_emulated_instruction(struct kvm_vcpu *vcpu)
@@ -3245,7 +3245,7 @@ static struct kvm_x86_ops pvm_x86_ops __initdata = {
 	.get_l2_tsc_multiplier = pvm_get_l2_tsc_multiplier,
 	.write_tsc_offset = pvm_write_tsc_offset,
 	.write_tsc_multiplier = pvm_write_tsc_multiplier,
-	.check_emulate_instruction = pvm_check_emulate_instruction,
+	.can_emulate_instruction = pvm_check_emulate_instruction,
 	.disallowed_va = pvm_disallowed_va,
 	.vcpu_gpc_refresh = pvm_vcpu_gpc_refresh,
 };
