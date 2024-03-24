@@ -18,6 +18,7 @@
 #include <asm/io_bitmap.h>
 #include <asm/pvm_para.h>
 #include <asm/mmu_context.h>
+#include <asm/trapnr.h>
 
 #include "cpuid.h"
 #include "lapic.h"
