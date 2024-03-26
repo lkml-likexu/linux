@@ -34,6 +34,9 @@ MODULE_LICENSE("GPL");
 static bool __read_mostly enable_cpuid_intercept = 0;
 module_param_named(cpuid_intercept, enable_cpuid_intercept, bool, 0444);
 
+static bool __read_mostly enable_direct_switch = true;
+module_param_named(direct_switch, enable_direct_switch, bool, 0444);
+
 static bool __read_mostly is_intel;
 
 static unsigned long host_idt_base;
@@ -2881,6 +2884,9 @@ static void pvm_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
 
 	// PVM resets
 	pvm->switch_flags = SWITCH_FLAGS_INIT;
+	if (!enable_direct_switch)
+		pvm->switch_flags |= SWITCH_FLAGS_NO_DS;
+
 	pvm->hw_cs = __USER_CS;
 	pvm->hw_ss = __USER_DS;
 	pvm->int_shadow = 0;
@@ -2903,6 +2909,8 @@ static int pvm_vcpu_create(struct kvm_vcpu *vcpu)
 	BUILD_BUG_ON(offsetof(struct vcpu_pvm, vcpu) != 0);
 
 	pvm->switch_flags = SWITCH_FLAGS_INIT;
+	if (!enable_direct_switch)
+		pvm->switch_flags |= SWITCH_FLAGS_NO_DS;
 	kvm_gpc_init(&pvm->pvcs_gpc, vcpu->kvm, vcpu, KVM_GUEST_AND_HOST_USE_PFN);
 
 	return 0;
