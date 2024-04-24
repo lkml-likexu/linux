@@ -17,6 +17,8 @@ struct bpf_dummy_ops_test_args {
 	struct bpf_dummy_ops_state state;
 };
 
+static struct btf *bpf_dummy_ops_btf;
+
 static struct bpf_dummy_ops_test_args *
 dummy_ops_init_args(const union bpf_attr *kattr, unsigned int nr)
 {
@@ -72,6 +74,51 @@ static int dummy_ops_call_op(void *image, struct bpf_dummy_ops_test_args *args)
 		    args->args[3], args->args[4]);
 }
 
+static const struct bpf_ctx_arg_aux *find_ctx_arg_info(struct bpf_prog_aux *aux, int offset)
+{
+	int i;
+
+	for (i = 0; i < aux->ctx_arg_info_size; i++)
+		if (aux->ctx_arg_info[i].offset == offset)
+			return &aux->ctx_arg_info[i];
+
+	return NULL;
+}
+
+/* There is only one check at the moment:
+ * - zero should not be passed for pointer parameters not marked as nullable.
+ */
+static int check_test_run_args(struct bpf_prog *prog, struct bpf_dummy_ops_test_args *args)
+{
+	const struct btf_type *func_proto = prog->aux->attach_func_proto;
+
+	for (u32 arg_no = 0; arg_no < btf_type_vlen(func_proto) ; ++arg_no) {
+		const struct btf_param *param = &btf_params(func_proto)[arg_no];
+		const struct bpf_ctx_arg_aux *info;
+		const struct btf_type *t;
+		int offset;
+
+		if (args->args[arg_no] != 0)
+			continue;
+
+		/* Program is validated already, so there is no need
+		 * to check if t is NULL.
+		 */
+		t = btf_type_skip_modifiers(bpf_dummy_ops_btf, param->type, NULL);
+		if (!btf_type_is_ptr(t))
+			continue;
+
+		offset = btf_ctx_arg_offset(bpf_dummy_ops_btf, func_proto, arg_no);
+		info = find_ctx_arg_info(prog->aux, offset);
+		if (info && (info->reg_type & PTR_MAYBE_NULL))
+			continue;
+
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 extern const struct bpf_link_ops bpf_struct_ops_link_lops;
 
 int bpf_struct_ops_test_run(struct bpf_prog *prog, const union bpf_attr *kattr,
@@ -80,20 +127,30 @@ int bpf_struct_ops_test_run(struct bpf_prog *prog, const union bpf_attr *kattr,
 	const struct bpf_struct_ops *st_ops = &bpf_bpf_dummy_ops;
 	const struct btf_type *func_proto;
 	struct bpf_dummy_ops_test_args *args;
-	struct bpf_tramp_links *tlinks;
+	struct bpf_tramp_links *tlinks = NULL;
 	struct bpf_tramp_link *link = NULL;
 	void *image = NULL;
 	unsigned int op_idx;
 	int prog_ret;
+	s32 type_id;
 	int err;
 
-	if (prog->aux->attach_btf_id != st_ops->type_id)
+	type_id = btf_find_by_name_kind(bpf_dummy_ops_btf,
+					bpf_bpf_dummy_ops.name,
+					BTF_KIND_STRUCT);
+	if (type_id < 0)
+		return -EINVAL;
+	if (prog->aux->attach_btf_id != type_id)
 		return -EOPNOTSUPP;
 
 	func_proto = prog->aux->attach_func_proto;
 	args = dummy_ops_init_args(kattr, btf_type_vlen(func_proto));
 	if (IS_ERR(args))
 		return PTR_ERR(args);
+
+	err = check_test_run_args(prog, args);
+	if (err)
+		goto out;
 
 	tlinks = kcalloc(BPF_TRAMP_MAX, sizeof(*tlinks), GFP_KERNEL);
 	if (!tlinks) {
@@ -143,6 +200,7 @@ out:
 
 static int bpf_dummy_init(struct btf *btf)
 {
+	bpf_dummy_ops_btf = btf;
 	return 0;
 }
 
