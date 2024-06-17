@@ -1559,6 +1559,20 @@ static void __init cpu_parse_early_param(void)
 	if (cmdline_find_option_bool(boot_command_line, "nousershstk"))
 		setup_clear_cpu_cap(X86_FEATURE_USER_SHSTK);
 
+#ifdef CONFIG_PVM_GUEST
+	setup_clear_cpu_cap(X86_FEATURE_XTOPOLOGY);
+	setup_clear_cpu_cap(X86_FEATURE_SSBD);
+	setup_clear_cpu_cap(X86_FEATURE_TSC_ADJUST);
+	setup_clear_cpu_cap(X86_FEATURE_ARCH_CAPABILITIES);
+	setup_clear_cpu_cap(X86_FEATURE_CPUID_FAULT);
+	setup_clear_cpu_cap(X86_FEATURE_UMIP);
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD) {
+		setup_clear_cpu_cap(X86_FEATURE_TSC_DEADLINE_TIMER);
+		setup_clear_cpu_cap(X86_FEATURE_PCID);
+		setup_clear_cpu_cap(X86_FEATURE_3DNOWPREFETCH);
+	}
+#endif
+
 	arglen = cmdline_find_option(boot_command_line, "clearcpuid", arg, sizeof(arg));
 	if (arglen <= 0)
 		return;
