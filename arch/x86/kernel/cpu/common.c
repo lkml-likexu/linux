@@ -1530,7 +1530,7 @@ static void detect_nopl(void)
  */
 static void __init cpu_parse_early_param(void)
 {
-	char arg[128];
+	char arg[1024];
 	char *argptr = arg, *opt;
 	int arglen, taint = 0;
 
