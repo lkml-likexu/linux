@@ -257,6 +257,11 @@ bool check_hw_exists(struct pmu *pmu, int num_counters, int num_counters_fixed)
 	int bios_fail = 0;
 	int reg_safe = -1;
 
+#ifdef CONFIG_PVM_GUEST
+	pr_cont("PMU not available due to virtualization, using software events only.\n");
+	return false;
+#endif
+
 	/*
 	 * Check to see if the BIOS enabled any of the counters, if so
 	 * complain and bail.
