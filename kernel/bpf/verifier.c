@@ -440,11 +440,6 @@ static bool type_is_sk_pointer(enum bpf_reg_type type)
 		type == PTR_TO_XDP_SOCK;
 }
 
-static bool type_may_be_null(u32 type)
-{
-	return type & PTR_MAYBE_NULL;
-}
-
 static bool reg_not_null(const struct bpf_reg_state *reg)
 {
 	enum bpf_reg_type type;

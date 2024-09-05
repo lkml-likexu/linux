@@ -787,4 +787,9 @@ static inline bool bpf_type_has_unsafe_modifiers(u32 type)
 	return type_flag(type) & ~BPF_REG_TRUSTED_MODIFIERS;
 }
 
+static inline bool type_may_be_null(u32 type)
+{
+	return type & PTR_MAYBE_NULL;
+}
+
 #endif /* _LINUX_BPF_VERIFIER_H */
