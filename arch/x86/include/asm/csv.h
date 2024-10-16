@@ -13,6 +13,7 @@
 #ifndef __ASSEMBLY__
 
 #ifdef CONFIG_HYGON_CSV
+#include <linux/nodemask.h>
 
 struct csv_mem {
 	uint64_t start;

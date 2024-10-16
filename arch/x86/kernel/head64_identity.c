@@ -14,6 +14,7 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/pgtable.h>
+#include <linux/nodemask.h>
 
 #include <asm/desc.h>
 #include <asm/sections.h>
