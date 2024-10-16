@@ -20,6 +20,8 @@
 #include <asm/mmu_context.h>
 #include <asm/trapnr.h>
 
+#include <trace/events/ipi.h>
+
 #include "cpuid.h"
 #include "lapic.h"
 #include "mmu.h"
@@ -2787,7 +2789,7 @@ static inline void pvm_load_host_xsave_state(struct kvm_vcpu *vcpu)
 	}
 }
 
-static fastpath_t pvm_vcpu_run(struct kvm_vcpu *vcpu)
+static fastpath_t pvm_vcpu_run(struct kvm_vcpu *vcpu, bool force_immediate_exit)
 {
 	struct vcpu_pvm *pvm = to_pvm(vcpu);
 	bool is_smod_befor_run = is_smod(pvm);
@@ -2809,9 +2811,12 @@ static fastpath_t pvm_vcpu_run(struct kvm_vcpu *vcpu)
 		return EXIT_FASTPATH_NONE;
 	}
 
-	trace_kvm_entry(vcpu);
+	trace_kvm_entry(vcpu, force_immediate_exit);
 
 	pvm_load_guest_xsave_state(vcpu);
+
+	if (force_immediate_exit)
+		smp_send_reschedule(vcpu->cpu);
 
 	kvm_wait_lapic_expire(vcpu);
 
@@ -3136,11 +3141,6 @@ static void hardware_unsetup(void)
 
 //====== start of dummy pmu ===========
 //TODO: split kvm-pmu-intel.ko & kvm-pmu-amd.ko from kvm-intel.ko & kvm-amd.ko.
-static bool dummy_pmu_hw_event_available(struct kvm_pmc *pmc)
-{
-	return true;
-}
-
 static struct kvm_pmc *dummy_pmc_idx_to_pmc(struct kvm_pmu *pmu, int pmc_idx)
 {
 	return NULL;
@@ -3150,11 +3150,6 @@ static struct kvm_pmc *dummy_pmu_rdpmc_ecx_to_pmc(struct kvm_vcpu *vcpu,
 						  unsigned int idx, u64 *mask)
 {
 	return NULL;
-}
-
-static bool dummy_pmu_is_valid_rdpmc_ecx(struct kvm_vcpu *vcpu, unsigned int idx)
-{
-	return false;
 }
 
 static struct kvm_pmc *dummy_pmu_msr_idx_to_pmc(struct kvm_vcpu *vcpu, u32 msr)
@@ -3190,11 +3185,9 @@ static void dummy_pmu_reset(struct kvm_vcpu *vcpu)
 }
 
 struct kvm_pmu_ops dummy_pmu_ops = {
-	.hw_event_available = dummy_pmu_hw_event_available,
 	.pmc_idx_to_pmc = dummy_pmc_idx_to_pmc,
 	.rdpmc_ecx_to_pmc = dummy_pmu_rdpmc_ecx_to_pmc,
 	.msr_idx_to_pmc = dummy_pmu_msr_idx_to_pmc,
-	.is_valid_rdpmc_ecx = dummy_pmu_is_valid_rdpmc_ecx,
 	.is_valid_msr = dummy_pmu_is_valid_msr,
 	.get_msr = dummy_pmu_get_msr,
 	.set_msr = dummy_pmu_set_msr,
@@ -3286,8 +3279,6 @@ static struct kvm_x86_ops pvm_x86_ops __initdata = {
 
 	.check_intercept = pvm_check_intercept,
 	.handle_exit_irqoff = pvm_handle_exit_irqoff,
-
-	.request_immediate_exit = __kvm_request_immediate_exit,
 
 	.sched_in = pvm_sched_in,
 
