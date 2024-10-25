@@ -3230,7 +3230,11 @@ enum cpu_mitigations {
 #ifdef CONFIG_CPU_MITIGATIONS_DEFAULT_OFF
 static enum cpu_mitigations cpu_mitigations __ro_after_init = CPU_MITIGATIONS_OFF;
 #else
+#ifdef CONFIG_PVM_GUEST
+static enum cpu_mitigations cpu_mitigations __ro_after_init = CPU_MITIGATIONS_OFF;
+#else
 static enum cpu_mitigations cpu_mitigations __ro_after_init = CPU_MITIGATIONS_AUTO;
+#endif
 #endif
 
 static int __init mitigations_parse_cmdline(char *arg)
