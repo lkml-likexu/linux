@@ -12,6 +12,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/vmalloc.h>
+#include <linux/kmem_cache.h>
 
 #include <asm/cpufeature.h>
 #include <asm/vsyscall.h>
@@ -105,14 +106,14 @@ int __init host_mmu_init(void)
 	else
 		host_pgd = (void *)kernel_to_user_pgdp(current->active_mm->pgd);
 
-	host_mmu_root_pgd = (void *)__get_free_page(GFP_KERNEL | __GFP_ZERO);
+	host_mmu_root_pgd = kmem_cache_get_free_page(GFP_KERNEL | __GFP_ZERO);
 
 	if (!host_mmu_root_pgd) {
 		host_mmu_destroy();
 		return -ENOMEM;
 	}
 	if (pgtable_l5_enabled()) {
-		host_mmu_la57_top_p4d = (void *)__get_free_page(GFP_KERNEL | __GFP_ZERO);
+		host_mmu_la57_top_p4d = kmem_cache_get_free_page(GFP_KERNEL | __GFP_ZERO);
 		if (!host_mmu_la57_top_p4d) {
 			host_mmu_destroy();
 			return -ENOMEM;
