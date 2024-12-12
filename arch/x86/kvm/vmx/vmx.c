@@ -29,6 +29,7 @@
 #include <linux/tboot.h>
 #include <linux/trace_events.h>
 #include <linux/entry-kvm.h>
+#include <linux/kmem_cache.h>
 
 #include <asm/apic.h>
 #include <asm/asm.h>
@@ -2944,7 +2945,7 @@ int alloc_loaded_vmcs(struct loaded_vmcs *loaded_vmcs)
 
 	if (cpu_has_vmx_msr_bitmap()) {
 		loaded_vmcs->msr_bitmap = (unsigned long *)
-				__get_free_page(GFP_KERNEL_ACCOUNT);
+				kmem_cache_get_free_page(GFP_KERNEL_ACCOUNT);
 		if (!loaded_vmcs->msr_bitmap)
 			goto out_vmcs;
 		memset(loaded_vmcs->msr_bitmap, 0xff, PAGE_SIZE);

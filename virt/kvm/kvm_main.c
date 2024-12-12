@@ -52,6 +52,7 @@
 #include <linux/lockdep.h>
 #include <linux/kthread.h>
 #include <linux/suspend.h>
+#include <linux/kmem_cache.h>
 
 #include <asm/processor.h>
 #include <asm/ioctl.h>
@@ -408,7 +409,7 @@ static inline void *mmu_memory_cache_alloc_obj(struct kvm_mmu_memory_cache *mc,
 	if (mc->kmem_cache)
 		return kmem_cache_alloc(mc->kmem_cache, gfp_flags);
 	else
-		return (void *)__get_free_page(gfp_flags);
+		return kmem_cache_get_free_page(gfp_flags);
 }
 
 int __kvm_mmu_topup_memory_cache(struct kvm_mmu_memory_cache *mc, int capacity, int min)
