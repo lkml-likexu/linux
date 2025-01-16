@@ -484,6 +484,11 @@ This package provides debug information for the bpftool package.
 %define with_ofed 0
 %endif
 
+# If the arch is riscv64 or loongarch64, don't compile mlnx commercial-grade quality driver.
+%ifarch !x86_64 !aarch64
+%define with_ofed 0
+%endif
+
 %if %{with_ofed}
 %ifarch x86_64
 %package -n mlnx-ofed-dist
