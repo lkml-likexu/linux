@@ -492,15 +492,15 @@ This package provides debug information for the bpftool package.
 %endif
 
 %if %{with_ofed}
-%ifarch x86_64
-%package -n mlnx-ofed-dist
-Summary: Mellonax ofed rpms installation
-License: GPLv2
 %if "%{?dist}" != ".tl3"
 ## "${DISTRO}" is .tl4 or oc9
 BuildRequires: kernel-srpm-macros
 BuildRequires: perl-sigtrap
 %endif
+%ifarch x86_64
+%package -n mlnx-ofed-dist
+Summary: Mellonax ofed rpms installation
+License: GPLv2
 BuildRequires: kernel-rpm-macros
 BuildRequires: lsof
 BuildRequires: pciutils
