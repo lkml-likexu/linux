@@ -318,12 +318,15 @@ int get_tsc_mode(unsigned long adr)
 
 int set_tsc_mode(unsigned int val)
 {
-	if (val == PR_TSC_SIGSEGV)
+	if (val == PR_TSC_SIGSEGV) {
+		pr_emerg_ratelimited("%s[%d] unsupported PR_TSC_SIGSEGV in PVM\n",
+				current->comm, task_pid_nr(current));
 		disable_TSC();
-	else if (val == PR_TSC_ENABLE)
+	} else if (val == PR_TSC_ENABLE) {
 		enable_TSC();
-	else
+	} else {
 		return -EINVAL;
+	}
 
 	return 0;
 }
