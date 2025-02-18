@@ -7107,8 +7107,6 @@ static struct mem_cgroup *mem_cgroup_alloc(struct mem_cgroup *parent)
 #endif
 	lru_gen_init_memcg(memcg);
 
-	memcg->parent = parent ? parent : root_mem_cgroup;
-
 	return memcg;
 fail:
 	mem_cgroup_id_remove(memcg);
@@ -9124,12 +9122,21 @@ int __mem_cgroup_charge(struct folio *folio, struct mm_struct *mm, gfp_t gfp)
 
 int __mem_cgroup_charge_file(struct folio *folio, struct mm_struct *mm, gfp_t gfp)
 {
-	struct mem_cgroup *memcg;
+	struct mem_cgroup *memcg, *parent;
 	int ret;
 
 	memcg = get_mem_cgroup_from_mm(mm);
-	if (memcg->reparent_file)
-		memcg = memcg->parent;
+	if (memcg->reparent_file) {
+		parent = parent_mem_cgroup(memcg);
+		if (parent && css_tryget_online(&parent->css)) {
+			/*
+			 * Changed charge memory cgroup to parent, drop
+			 * previous reference.
+			 */
+			css_put(&memcg->css);
+			memcg = parent;
+		}
+	}
 	ret = charge_memcg(folio, memcg, gfp);
 	css_put(&memcg->css);
 

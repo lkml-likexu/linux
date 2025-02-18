@@ -257,7 +257,6 @@ struct mem_cgroup {
 	u64 pagecache_reclaim_ratio;
 	u32 pagecache_max_ratio;
 	u32 reparent_file;
-	struct mem_cgroup *parent;
 
 	/* Legacy consumer-oriented counters */
 	struct page_counter kmem;		/* v1 only */
