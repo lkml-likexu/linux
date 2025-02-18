@@ -17,6 +17,20 @@
 #include <uapi/linux/perf_event.h>
 #include <uapi/linux/bpf_perf_event.h>
 
+#ifdef CONFIG_GUEST_PERF_EVENTS_CALLCHAIN
+/*
+ * Structures as interface between Perf Event and KVM subsystem.
+ * Add more members for new architectures if necessary.
+ */
+struct perf_kvm_guest_unwind_info {
+	unsigned long ip_pointer;
+	unsigned long frame_pointer;
+	unsigned long segment_cs_base;
+	unsigned long segment_ss_base;
+	bool is_guest_64bit;
+};
+#endif /* CONFIG_GUEST_PERF_EVENTS_CALLCHAIN */
+
 /*
  * Kernel-internal data types and definitions:
  */

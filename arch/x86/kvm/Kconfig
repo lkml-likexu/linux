@@ -174,4 +174,16 @@ config KVM_SUPPORTS_CSV_REUSE_ASID
 	  CSV guests, this allow the user to create more CSV guests on
 	  HYGON CPUs with limited ASIDs.
 
+config KVM_PERF_GUEST_CALLCHAIN
+	bool "Profiling Linux guest kernel call-chain"
+	default y
+	depends on KVM && X86_64 && GUEST_PERF_EVENTS
+	select GUEST_PERF_EVENTS_CALLCHAIN
+	help
+	  Profiling Linux guest kernel call-chain in a guess manner.
+
+	  To profile guest kernel via perf-kvm, choose Y.
+
+	  If unsure, say N.
+
 endif # VIRTUALIZATION
