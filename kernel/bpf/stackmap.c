@@ -297,8 +297,13 @@ BPF_CALL_3(bpf_get_stackid, struct pt_regs *, regs, struct bpf_map *, map,
 	if (max_depth > sysctl_perf_event_max_stack)
 		max_depth = sysctl_perf_event_max_stack;
 
+#ifdef CONFIG_GUEST_PERF_EVENTS_CALLCHAIN
+	trace = get_perf_callchain(regs, 0, kernel, user, true, false,
+				   max_depth, false, false);
+#else
 	trace = get_perf_callchain(regs, 0, kernel, user, max_depth,
 				   false, false);
+#endif /* CONFIG_GUEST_PERF_EVENTS_CALLCHAIN */
 
 	if (unlikely(!trace))
 		/* couldn't fetch the stack trace */
@@ -427,13 +432,19 @@ static long __bpf_get_stack(struct pt_regs *regs, struct task_struct *task,
 	if (sysctl_perf_event_max_stack < max_depth)
 		max_depth = sysctl_perf_event_max_stack;
 
-	if (trace_in)
+	if (trace_in) {
 		trace = trace_in;
-	else if (kernel && task)
+	} else if (kernel && task) {
 		trace = get_callchain_entry_for_task(task, max_depth);
-	else
+	} else {
+#ifdef CONFIG_GUEST_PERF_EVENTS_CALLCHAIN
+		trace = get_perf_callchain(regs, 0, kernel, user, true, false,
+					   max_depth, crosstask, false);
+#else
 		trace = get_perf_callchain(regs, 0, kernel, user, max_depth,
 					   crosstask, false);
+#endif /* CONFIG_GUEST_PERF_EVENTS_CALLCHAIN */
+	}
 	if (unlikely(!trace))
 		goto err_fault;
 

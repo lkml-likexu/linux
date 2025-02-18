@@ -7694,12 +7694,24 @@ perf_callchain(struct perf_event *event, struct pt_regs *regs)
 	bool crosstask = event->ctx->task && event->ctx->task != current;
 	const u32 max_stack = event->attr.sample_max_stack;
 	struct perf_callchain_entry *callchain;
+#ifdef CONFIG_GUEST_PERF_EVENTS_CALLCHAIN
+	bool host   = !event->attr.exclude_host;
+	bool guest  = !event->attr.exclude_guest;
+#endif /* CONFIG_GUEST_PERF_EVENTS_CALLCHAIN */
 
 	if (!kernel && !user)
 		return &__empty_callchain;
 
+#ifdef CONFIG_GUEST_PERF_EVENTS_CALLCHAIN
+	if (!host && !guest)
+		return &__empty_callchain;
+
+	callchain = get_perf_callchain(regs, 0, kernel, user, host, guest,
+				       max_stack, crosstask, true);
+#else
 	callchain = get_perf_callchain(regs, 0, kernel, user,
 				       max_stack, crosstask, true);
+#endif /* CONFIG_GUEST_PERF_EVENTS_CALLCHAIN */
 	return callchain ?: &__empty_callchain;
 }
 
