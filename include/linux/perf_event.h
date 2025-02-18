@@ -47,6 +47,11 @@ struct perf_guest_info_callbacks {
 	unsigned int			(*state)(void);
 	unsigned long			(*get_ip)(void);
 	unsigned int			(*handle_intel_pt_intr)(void);
+#ifdef CONFIG_GUEST_PERF_EVENTS_CALLCHAIN
+	bool				(*get_unwind_info)(struct perf_kvm_guest_unwind_info *info);
+	bool				(*read_virt)(unsigned long addr,
+						     void *dest, unsigned int len);
+#endif /* CONFIG_GUEST_PERF_EVENTS_CALLCHAIN */
 };
 
 #ifdef CONFIG_HAVE_HW_BREAKPOINT
@@ -1542,6 +1547,20 @@ DECLARE_STATIC_CALL(__perf_guest_state, *perf_guest_cbs->state);
 DECLARE_STATIC_CALL(__perf_guest_get_ip, *perf_guest_cbs->get_ip);
 DECLARE_STATIC_CALL(__perf_guest_handle_intel_pt_intr, *perf_guest_cbs->handle_intel_pt_intr);
 
+#ifdef CONFIG_GUEST_PERF_EVENTS_CALLCHAIN
+DECLARE_STATIC_CALL(__perf_guest_get_unwind_info, *perf_guest_cbs->get_unwind_info);
+DECLARE_STATIC_CALL(__perf_guest_read_virt, *perf_guest_cbs->read_virt);
+static inline bool perf_guest_get_unwind_info(struct perf_kvm_guest_unwind_info *info)
+{
+	return static_call(__perf_guest_get_unwind_info)(info);
+}
+
+static inline bool perf_guest_read_virt(unsigned long addr, void *dest, unsigned int length)
+{
+	return static_call(__perf_guest_read_virt)(addr, dest, length);
+}
+#endif /* CONFIG_GUEST_PERF_EVENTS_CALLCHAIN */
+
 static inline unsigned int perf_guest_state(void)
 {
 	return static_call(__perf_guest_state)();
@@ -1560,6 +1579,10 @@ extern void perf_unregister_guest_info_callbacks(struct perf_guest_info_callback
 static inline unsigned int perf_guest_state(void)		 { return 0; }
 static inline unsigned long perf_guest_get_ip(void)		 { return 0; }
 static inline unsigned int perf_guest_handle_intel_pt_intr(void) { return 0; }
+#ifdef CONFIG_GUEST_PERF_EVENTS_CALLCHAIN
+static inline bool perf_guest_get_unwind_info(struct perf_kvm_guest_unwind_info *) { return false; }
+static inline bool perf_guest_read_virt(unsigned long, void*, unsigned int)	   { return false; }
+#endif /* CONFIG_GUEST_PERF_EVENTS_CALLCHAIN */
 #endif /* CONFIG_GUEST_PERF_EVENTS */
 
 extern void perf_event_exec(void);

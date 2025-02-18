@@ -6091,10 +6091,36 @@ static unsigned long kvm_guest_get_ip(void)
 	return kvm_arch_vcpu_get_ip(vcpu);
 }
 
+#ifdef CONFIG_GUEST_PERF_EVENTS_CALLCHAIN
+static bool kvm_guest_get_unwind_info(struct perf_kvm_guest_unwind_info *info)
+{
+	struct kvm_vcpu *vcpu = kvm_get_running_vcpu();
+
+	if (WARN_ON_ONCE(!kvm_arch_pmi_in_guest(vcpu)))
+		return false;
+
+	return kvm_arch_vcpu_get_unwind_info(vcpu, info);
+}
+
+static bool kvm_guest_read_virt(unsigned long addr, void *dest, unsigned int length)
+{
+	struct kvm_vcpu *vcpu = kvm_get_running_vcpu();
+
+	if (WARN_ON_ONCE(!kvm_arch_pmi_in_guest(vcpu)))
+		return false;
+
+	return kvm_arch_vcpu_read_virt(vcpu, addr, dest, length);
+}
+#endif /* CONFIG_GUEST_PERF_EVENTS_CALLCHAIN */
+
 static struct perf_guest_info_callbacks kvm_guest_cbs = {
 	.state			= kvm_guest_state,
 	.get_ip			= kvm_guest_get_ip,
 	.handle_intel_pt_intr	= NULL,
+#ifdef CONFIG_GUEST_PERF_EVENTS_CALLCHAIN
+	.get_unwind_info	= kvm_guest_get_unwind_info,
+	.read_virt		= kvm_guest_read_virt,
+#endif /* CONFIG_GUEST_PERF_EVENTS_CALLCHAIN */
 };
 
 void kvm_register_perf_callbacks(unsigned int (*pt_intr_handler)(void))

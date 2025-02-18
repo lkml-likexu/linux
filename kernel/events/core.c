@@ -6877,6 +6877,11 @@ DEFINE_STATIC_CALL_RET0(__perf_guest_state, *perf_guest_cbs->state);
 DEFINE_STATIC_CALL_RET0(__perf_guest_get_ip, *perf_guest_cbs->get_ip);
 DEFINE_STATIC_CALL_RET0(__perf_guest_handle_intel_pt_intr, *perf_guest_cbs->handle_intel_pt_intr);
 
+#ifdef CONFIG_GUEST_PERF_EVENTS_CALLCHAIN
+DEFINE_STATIC_CALL_RET0(__perf_guest_get_unwind_info, *perf_guest_cbs->get_unwind_info);
+DEFINE_STATIC_CALL_RET0(__perf_guest_read_virt, *perf_guest_cbs->read_virt);
+#endif /* CONFIG_GUEST_PERF_EVENTS_CALLCHAIN */
+
 void perf_register_guest_info_callbacks(struct perf_guest_info_callbacks *cbs)
 {
 	if (WARN_ON_ONCE(rcu_access_pointer(perf_guest_cbs)))
@@ -6885,6 +6890,14 @@ void perf_register_guest_info_callbacks(struct perf_guest_info_callbacks *cbs)
 	rcu_assign_pointer(perf_guest_cbs, cbs);
 	static_call_update(__perf_guest_state, cbs->state);
 	static_call_update(__perf_guest_get_ip, cbs->get_ip);
+
+#ifdef CONFIG_GUEST_PERF_EVENTS_CALLCHAIN
+	if (cbs->get_unwind_info)
+		static_call_update(__perf_guest_get_unwind_info, cbs->get_unwind_info);
+
+	if (cbs->read_virt)
+		static_call_update(__perf_guest_read_virt, cbs->read_virt);
+#endif /* CONFIG_GUEST_PERF_EVENTS_CALLCHAIN */
 
 	/* Implementing ->handle_intel_pt_intr is optional. */
 	if (cbs->handle_intel_pt_intr)
@@ -6903,6 +6916,10 @@ void perf_unregister_guest_info_callbacks(struct perf_guest_info_callbacks *cbs)
 	static_call_update(__perf_guest_get_ip, (void *)&__static_call_return0);
 	static_call_update(__perf_guest_handle_intel_pt_intr,
 			   (void *)&__static_call_return0);
+#ifdef CONFIG_GUEST_PERF_EVENTS_CALLCHAIN
+	static_call_update(__perf_guest_get_unwind_info, (void *)&__static_call_return0);
+	static_call_update(__perf_guest_read_virt, (void *)&__static_call_return0);
+#endif /* CONFIG_GUEST_PERF_EVENTS_CALLCHAIN */
 	synchronize_rcu();
 }
 EXPORT_SYMBOL_GPL(perf_unregister_guest_info_callbacks);
