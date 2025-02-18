@@ -195,6 +195,32 @@ cleanup:
 	return ret;
 }
 
+static int alloc_pagecache_50M_reparent(const char *cgroup, void *arg)
+{
+	char *parent = NULL;
+	long file;
+	int fd;
+
+	fd = get_temp_fd();
+	if (fd < 0)
+		return -1;
+
+	parent = cg_name(cgroup, "../");
+
+	if (alloc_pagecache(fd, MB(50)))
+		return -1;
+
+	file = cg_read_key_long(cgroup, "memory.stat", "file ");
+	if (file < 0 || file > MB(3))
+		return -1;
+
+	file = cg_read_key_long(parent, "memory.stat", "file ");
+	if (file < 0 || file < MB(50))
+		return -1;
+
+	return 0;
+}
+
 static int alloc_pagecache_50M_noexit(const char *cgroup, void *arg)
 {
 	int fd = (long)arg;
@@ -1287,6 +1313,59 @@ cleanup:
 	return ret;
 }
 
+/*
+ * This test creates nested cgroups with parent disable reparent_file
+ * and child enable reparent_file.
+ */
+static int test_memcg_reparent_file(const char *root)
+{
+	char *parent, *child;
+	int ret = KSFT_FAIL, fd;
+
+	fd = get_temp_fd();
+	if (fd < 0)
+		goto cleanup;
+
+	/* Create two nested cgroups with the memory controller enabled */
+	parent = cg_name(root, "memcg_test_parent");
+	child = cg_name(root, "memcg_test_parent/memcg_test_child");
+	if (!parent || !child)
+		goto cleanup_free;
+
+	if (cg_create(parent))
+		goto cleanup_free;
+
+	if (cg_write(parent, "cgroup.subtree_control", "+memory"))
+		goto cleanup_parent;
+
+	if (cg_create(child))
+		goto cleanup_parent;
+
+	if (cg_read_strstr(child, "cgroup.controllers", "memory"))
+		goto cleanup;
+
+	if (cg_write(parent, "memory.reparent_file", "0"))
+		goto cleanup;
+
+	if (cg_write(child, "memory.reparent_file", "1"))
+		goto cleanup;
+
+	if (cg_run(child, alloc_pagecache_50M_reparent, NULL))
+		goto cleanup;
+
+	ret = KSFT_PASS;
+
+cleanup:
+	cg_destroy(child);
+cleanup_parent:
+	cg_destroy(parent);
+cleanup_free:
+	free(parent);
+	free(child);
+
+	return ret;
+}
+
 #define T(x) { x, #x }
 struct memcg_test {
 	int (*fn)(const char *root);
@@ -1306,6 +1385,7 @@ struct memcg_test {
 	T(test_memcg_oom_group_leaf_events),
 	T(test_memcg_oom_group_parent_events),
 	T(test_memcg_oom_group_score_events),
+	T(test_memcg_reparent_file),
 };
 #undef T
 
