@@ -648,9 +648,9 @@ BuildConfig() {
 	pushd ${_KernSrc}/drivers/thirdparty
 	%if %{with_ofed}
 		rm -f download-and-copy-drivers.sh; cp -a %{SOURCE3000} ./
-		## Real MLNX_OFED_LINUX-*.tgz will more than 1024 bytes.
-		## Dummy MLNX_OFED_LINUX-*.tgz will less than 1024 bytes.
-		if [ $(stat -c%s %{SOURCE3001}) -gt 1024 ]; then
+		mlnx_tgz_sha256=$(release-drivers/mlnx/get_mlnx_info.sh mlnx_tgz_sha256)
+		sha256_tmp=$(sha256sum %{SOURCE3001} | awk '{printf $1}')
+		if [[ $sha256_tmp == $mlnx_tgz_sha256 ]]; then
 			cp -a %{SOURCE3001} release-drivers/mlnx/
 			./copy-drivers.sh without_mlnx
 		else
