@@ -17,7 +17,7 @@ check_url_reachable()
 	mlnx_tgz_url=$(../../drivers/thirdparty/release-drivers/mlnx/get_mlnx_info.sh backup_url)
 	curl -I $mlnx_tgz_url 1>/dev/null 2>&1
 	if (( $? != 0 )); then
-		echo "Could not download ${mlnx_tgz_name} !"
+		echo "Could not download ${mlnx_tgz_name} ! URL can't reachable!"
 		exit 1
 	fi
 }
@@ -25,13 +25,13 @@ check_url_reachable()
 thirdparty_mlnx(){
 	get_mlnx_tgz_ok=1
 
-	# Real MLNX_OFED_LINUX-*.tgz will more than 1024 bytes.
-	# Dummy MLNX_OFED_LINUX-*.tgz will less than 1024 bytes.
-	if [ $(stat -c%s ${mlnx_tgz_name}) -lt 1024 ]; then
+	sha256_tmp=$(sha256sum ${mlnx_tgz_name} | awk '{printf $1}')
+	if [[ $sha256_tmp != $mlnx_tgz_sha256 ]]; then
 		rm -f ${mlnx_tgz_name}
 		timeout 900 wget -q $mlnx_tgz_url || get_mlnx_tgz_ok=0
 	fi
 
+	## Check the mlnx_tgz which just downloaded.
 	sha256_tmp=$(sha256sum ${mlnx_tgz_name} | awk '{printf $1}')
 	if [[ $sha256_tmp != $mlnx_tgz_sha256 ]]; then get_mlnx_tgz_ok=0; fi
 
@@ -44,8 +44,14 @@ thirdparty_mlnx(){
 ##
 ## main , script start run at here.
 ##
-check_url_reachable
+max_attempts=3
 
-thirdparty_mlnx
+for attempt in {1..$max_attempts}; do
+	check_url_reachable
+	thirdparty_mlnx
 
-echo "Having downloaded thirdparty drivers."
+	if (( $? == 0 )); then
+		echo "Having downloaded thirdparty drivers."
+		break
+	fi
+done

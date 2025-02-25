@@ -6,12 +6,14 @@ thirdparty_mlnx(){
 
 	if [ ! -e release-drivers/mlnx/${mlnx_tgz_name} ] ; then
 		./download-and-copy-drivers.sh
+		if (( $? != 0 )) ; then exit 1 ; fi
 		mv ${mlnx_tgz_name} release-drivers/mlnx/
 	else
 		sha256_tmp=$(sha256sum release-drivers/mlnx/${mlnx_tgz_name} | awk '{printf $1}')
 		if [[ $sha256_tmp != $mlnx_tgz_sha256 ]]; then
 			echo "Warning: release-drivers/mlnx/${mlnx_tgz_name} is exist, but sha256sum is not correct!"
 			./download-and-copy-drivers.sh
+			if (( $? != 0 )) ; then exit 1 ; fi
 			mv ${mlnx_tgz_name} release-drivers/mlnx/
 		fi
 	fi
