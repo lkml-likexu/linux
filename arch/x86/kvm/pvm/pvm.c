@@ -2691,6 +2691,9 @@ static noinstr void pvm_vcpu_run_noinstr(struct kvm_vcpu *vcpu)
 
 	guest_state_enter_irqoff();
 
+	/* KVM userland should not trap rdtsc for PVM guest OR too many #GPs. */
+	WARN_ON_ONCE(test_thread_flag(TIF_NOTSC));
+
 	// Load guest registers into the host sp0 stack for switcher.
 	load_regs(vcpu, sp0_regs);
 
@@ -2705,8 +2708,16 @@ static noinstr void pvm_vcpu_run_noinstr(struct kvm_vcpu *vcpu)
 	if (unlikely(pvm->guest_dr7 & DR7_BP_EN_MASK))
 		set_debugreg(pvm_eff_dr7(vcpu), 7);
 
+	/* The best shot timing to configure hw.cr4 for PVM guest context. */
+	if ((vcpu->arch.cr4 & X86_CR4_TSD) && !is_smod(pvm) &&
+	    !test_and_set_thread_flag(TIF_NOTSC))
+		cr4_set_bits(X86_CR4_TSD);
+
 	// Call into switcher and enter guest.
 	ret_regs = switcher_enter_guest();
+
+	if (test_and_clear_thread_flag(TIF_NOTSC))
+		cr4_clear_bits(X86_CR4_TSD);
 
 	// Get the resulted mode and PVM MSRs which might be changed
 	// when direct switching.
