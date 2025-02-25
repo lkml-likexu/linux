@@ -670,7 +670,7 @@ SYSCALL_DEFINE3(modify_ldt, int , func , void __user * , ptr ,
 	int ret = -ENOSYS;
 
 	if (cpu_feature_enabled(X86_FEATURE_KVM_PVM_GUEST)) {
-		pr_emerg_ratelimited("%s[%d] unsupported PVM feature: modify_ldt\n",
+		pr_emerg_ratelimited("%s[%d] unsupported modify_ldt in PVM\n",
 				     current->comm, task_pid_nr(current));
 		return (unsigned int)ret;
 	}
