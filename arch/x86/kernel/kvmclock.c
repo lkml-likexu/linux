@@ -251,10 +251,7 @@ static int __init kvm_setup_vsyscall_timeinfo(void)
 
 		flags = pvclock_read_flags(&hv_clock_boot[0].pvti);
 		if (!(flags & PVCLOCK_TSC_STABLE_BIT)) {
-			if (IS_ENABLED(CONFIG_KVM_FORCE_PVCLOCK)) {
-				pr_info("Forcing vclock_mode = VCLOCK_PVCLOCK\n");
-				kvm_clock.vdso_clock_mode = VDSO_CLOCKMODE_PVCLOCK;
-			}
+			pr_info("kvm-clock: VDSO_CLOCKMODE_PVCLOCK disabled due to unstable tsc\n");
 			return 0;
 		}
 
@@ -319,8 +316,10 @@ void __init kvmclock_init(void)
 	kvm_register_clock("primary cpu clock");
 	pvclock_set_pvti_cpu0_va(hv_clock_boot);
 
+#ifndef CONFIG_PVM_GUEST
 	if (kvm_para_has_feature(KVM_FEATURE_CLOCKSOURCE_STABLE_BIT))
 		pvclock_set_flags(PVCLOCK_TSC_STABLE_BIT);
+#endif
 
 	flags = pvclock_read_flags(&hv_clock_boot[0].pvti);
 	kvm_sched_clock_init(flags & PVCLOCK_TSC_STABLE_BIT);
