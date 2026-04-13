@@ -83,7 +83,26 @@ static __always_inline
 u64 __pvclock_read_cycles(const struct pvclock_vcpu_time_info *src, u64 tsc)
 {
 	u64 delta = tsc - src->tsc_timestamp;
-	u64 offset = pvclock_scale_delta(delta, src->tsc_to_system_mul,
+	u64 offset;
+
+	/*
+	 * Protect against TSC going backwards after live migration.
+	 *
+	 * When a guest is paused on a host with large uptime (large TSC)
+	 * and resumed on a host with small uptime (small TSC), the current
+	 * TSC can be smaller than tsc_timestamp saved from the old host.
+	 * The unsigned subtraction wraps around to a huge value, which
+	 * after scaling yields a ~260+ year offset — corrupting all
+	 * kernel timekeeping.
+	 *
+	 * Treat a wrapped delta (i.e. TSC went backwards) as zero elapsed
+	 * time.  The host will update tsc_timestamp via kvm_guest_time_update()
+	 * shortly after, at which point normal time tracking resumes.
+	 */
+	if (unlikely((s64)delta < 0))
+		delta = 0;
+
+	offset = pvclock_scale_delta(delta, src->tsc_to_system_mul,
 					     src->tsc_shift);
 	return src->system_time + offset;
 }
