@@ -1328,6 +1328,12 @@ int do_settimeofday64(const struct timespec64 *ts)
 	ts_delta = timespec64_sub(*ts, xt);
 
 	if (timespec64_compare(&tk->wall_to_monotonic, &ts_delta) > 0) {
+		pr_warn("do_settimeofday64: monotonic clock would go backwards, "
+			"ts_delta=%lld.%09ld wall_to_mono=%lld.%09ld\n",
+			(long long)ts_delta.tv_sec, ts_delta.tv_nsec,
+			(long long)tk->wall_to_monotonic.tv_sec,
+			tk->wall_to_monotonic.tv_nsec);
+		dump_stack();
 		ret = -EINVAL;
 		goto out;
 	}
