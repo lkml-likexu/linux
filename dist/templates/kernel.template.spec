@@ -1044,7 +1044,9 @@ InstKernelDevel() {
 }
 
 InstKernelHeaders () {
+	pushd $_KernBuild
 	%{kernel_make} headers_install
+	popd
 	find %{buildroot}/usr/include \
 		\( -name .install -o -name .check -o \
 		-name ..install.cmd -o -name ..check.cmd \) -delete
