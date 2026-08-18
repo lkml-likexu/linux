@@ -222,6 +222,32 @@ size_t get_def_hugetlb_pagesz(void)
 	TEST_FAIL("Error in reading /proc/meminfo");
 }
 
+size_t get_free_hugepages(size_t page_size)
+{
+	char path[128];
+	size_t free, resv;
+
+	snprintf(path, sizeof(path),
+		 "/sys/kernel/mm/hugepages/hugepages-%zukB/free_hugepages",
+		 page_size >> 10);
+	if (!test_sysfs_path(path))
+		return 0;
+	free = get_sysfs_val(path);
+
+	/*
+	 * free_hugepages still counts pages that are reserved by existing
+	 * mappings but not yet faulted in, so only free minus resv can back a
+	 * new reservation (see available_huge_pages() in mm/hugetlb.c). Ignore
+	 * surplus/overcommit: it does not apply to gigantic pages at runtime.
+	 */
+	snprintf(path, sizeof(path),
+		 "/sys/kernel/mm/hugepages/hugepages-%zukB/resv_hugepages",
+		 page_size >> 10);
+	resv = test_sysfs_path(path) ? get_sysfs_val(path) : 0;
+
+	return free > resv ? (free - resv) * page_size : 0;
+}
+
 #define ANON_FLAGS	(MAP_PRIVATE | MAP_ANONYMOUS)
 #define ANON_HUGE_FLAGS	(ANON_FLAGS | MAP_HUGETLB)
 
