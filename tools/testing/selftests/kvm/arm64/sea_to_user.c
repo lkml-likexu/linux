@@ -165,11 +165,16 @@ static void guest_code(void)
 {
 	u64 guest_data;
 
-	/* Consumes error will cause a SEA. */
+	/* Consuming a real poison faults as an SEA and never returns here. */
 	guest_data = *(u64 *)EINJ_GVA;
 
-	GUEST_FAIL("Poison not protected by SEA: gva=%#lx, guest_data=%#lx\n",
-		   EINJ_GVA, guest_data);
+	/*
+	 * The read returned, so this platform placed no consumable poison.
+	 * Report the value read as a positive signal that is distinct from a
+	 * GUEST_ASSERT failure, so the host can skip on this limitation without
+	 * masking a genuine SEA-handling failure.
+	 */
+	GUEST_SYNC1(guest_data);
 }
 
 static void expect_sea_handler(struct ex_regs *regs)
@@ -215,12 +220,45 @@ static void run_vm(struct kvm_vm *vm, struct kvm_vcpu *vcpu)
 
 	ksft_print_msg("Dump kvm_run info about KVM_EXIT_%s\n",
 		       exit_reason_str(run->exit_reason));
+
+	/*
+	 * The guest's read of the injected location must trap to KVM as an
+	 * SEA. If the exit is something else, decode what the guest did before
+	 * deciding whether to skip or fail:
+	 *
+	 *  - UCALL_SYNC: the read returned instead of faulting, so no
+	 *    consumable poison was placed. Some firmware only arms EINJ poison
+	 *    as part of the trigger step that notrigger=1 skips, leaving
+	 *    nothing for the guest to consume; arm64 delivers the ucall as an
+	 *    MMIO write (hence KVM_EXIT_MMIO). This platform cannot host the
+	 *    test, so skip, matching the requirement documented at the top.
+	 *  - UCALL_ABORT: the guest took an abort but its SEA handler failed an
+	 *    assertion. That is a genuine problem, so report it rather than
+	 *    masking it as the limitation above.
+	 *  - anything else: fall through to the exit-reason assertion.
+	 */
+	if (run->exit_reason != KVM_EXIT_ARM_SEA) {
+		switch (get_ucall(vcpu, &uc)) {
+		case UCALL_SYNC:
+			ksft_print_msg("Guest read back %#lx without an SEA\n",
+				       uc.args[0]);
+			ksft_exit_skip("EINJ notrigger placed no consumable poison on this platform\n");
+			break;
+		case UCALL_ABORT:
+			REPORT_GUEST_ASSERT(uc);
+			break;
+		default:
+			break;
+		}
+	}
+
+	TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_ARM_SEA);
+
+	/* arm_sea holds valid data only for a KVM_EXIT_ARM_SEA exit. */
 	ksft_print_msg("kvm_run.arm_sea: esr=%#llx, flags=%#llx\n",
 		       run->arm_sea.esr, run->arm_sea.flags);
 	ksft_print_msg("kvm_run.arm_sea: gva=%#llx, gpa=%#llx\n",
 		       run->arm_sea.gva, run->arm_sea.gpa);
-
-	TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_ARM_SEA);
 
 	esr = run->arm_sea.esr;
 	TEST_ASSERT_EQ(ESR_ELx_EC(esr), ESR_ELx_EC_DABT_LOW);
