@@ -1278,10 +1278,6 @@ struct microcode_ops * __init init_hygon_microcode(void)
 	strscpy((char *)ucode_path, "kernel/x86/microcode/HygonGenuine.bin",
 		sizeof(ucode_path));
 
-	if (ucode_new_rev)
-		pr_info_once("microcode updated early to new patch_level=0x%08x\n",
-			     ucode_new_rev);
-
 	return &microcode_amd_ops;
 }
 #endif
