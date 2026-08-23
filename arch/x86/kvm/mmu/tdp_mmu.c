@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include <linux/kmem_cache.h>
-
 #include "mmu.h"
 #include "mmu_internal.h"
 #include "mmutrace.h"
@@ -1333,7 +1331,7 @@ static struct kvm_mmu_page *__tdp_mmu_alloc_sp_for_split(gfp_t gfp)
 	if (!sp)
 		return NULL;
 
-	sp->spt = kmem_cache_get_free_page(gfp);
+	sp->spt = (void *)__get_free_page(gfp);
 	if (!sp->spt) {
 		kmem_cache_free(mmu_page_header_cache, sp);
 		return NULL;

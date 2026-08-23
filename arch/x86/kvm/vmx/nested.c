@@ -3,7 +3,6 @@
 
 #include <linux/objtool.h>
 #include <linux/percpu.h>
-#include <linux/kmem_cache.h>
 
 #include <asm/debugreg.h>
 #include <asm/mmu_context.h>
@@ -7181,7 +7180,7 @@ __init int nested_vmx_hardware_setup(int (*exit_handlers[])(struct kvm_vcpu *))
 			 * not be charged to a memcg.
 			 */
 			vmx_bitmap[i] = (unsigned long *)
-				kmem_cache_get_free_page(GFP_KERNEL);
+				__get_free_page(GFP_KERNEL);
 			if (!vmx_bitmap[i]) {
 				nested_vmx_hardware_unsetup();
 				return -ENOMEM;
