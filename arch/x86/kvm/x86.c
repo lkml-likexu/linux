@@ -4021,14 +4021,6 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		if (kvm_pmu_is_valid_msr(vcpu, msr))
 			return kvm_pmu_set_msr(vcpu, msr_info);
 
-		/*
-		 * Userspace is allowed to write '0' to MSRs that KVM reports
-		 * as to-be-saved, even if an MSRs isn't fully supported.
-		 */
-		if (msr_info->host_initiated && !data &&
-		    kvm_is_msr_to_save(msr))
-			break;
-
 		return KVM_MSR_RET_UNSUPPORTED;
 	}
 	return 0;
@@ -4375,16 +4367,6 @@ int kvm_get_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	default:
 		if (kvm_pmu_is_valid_msr(vcpu, msr_info->index))
 			return kvm_pmu_get_msr(vcpu, msr_info);
-
-		/*
-		 * Userspace is allowed to read MSRs that KVM reports as
-		 * to-be-saved, even if an MSR isn't fully supported.
-		 */
-		if (msr_info->host_initiated &&
-		    kvm_is_msr_to_save(msr_info->index)) {
-			msr_info->data = 0;
-			break;
-		}
 
 		return KVM_MSR_RET_UNSUPPORTED;
 	}
