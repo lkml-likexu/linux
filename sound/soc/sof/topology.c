@@ -719,10 +719,13 @@ static int sof_parse_token_sets(struct snd_soc_component *scomp,
 	int ret;
 
 	while (array_size > 0 && total < count * token_instance_num) {
+		if (array_size < (int)sizeof(*array))
+			return -EINVAL;
+
 		asize = le32_to_cpu(array->size);
 
 		/* validate asize */
-		if (asize < 0) { /* FIXME: A zero-size array makes no sense */
+		if (asize < (int)sizeof(*array)) {
 			dev_err(scomp->dev, "error: invalid array size 0x%x\n",
 				asize);
 			return -EINVAL;
@@ -1057,7 +1060,7 @@ static int sof_connect_dai_widget(struct snd_soc_component *scomp,
 				  struct snd_sof_dai *dai)
 {
 	struct snd_soc_card *card = scomp->card;
-	struct snd_soc_pcm_runtime *rtd;
+	struct snd_soc_pcm_runtime *rtd, *full, *partial;
 	struct snd_soc_dai *cpu_dai;
 	int stream;
 	int i;
@@ -1074,12 +1077,22 @@ static int sof_connect_dai_widget(struct snd_soc_component *scomp,
 	else
 		goto end;
 
+	full = NULL;
+	partial = NULL;
 	list_for_each_entry(rtd, &card->rtd_list, list) {
 		/* does stream match DAI link ? */
-		if (!rtd->dai_link->stream_name ||
-		    !strstr(rtd->dai_link->stream_name, w->sname))
-			continue;
+		if (rtd->dai_link->stream_name) {
+			if (!strcmp(rtd->dai_link->stream_name, w->sname)) {
+				full = rtd;
+				break;
+			} else if (strstr(rtd->dai_link->stream_name, w->sname)) {
+				partial = rtd;
+			}
+		}
+	}
 
+	rtd = full ? full : partial;
+	if (rtd) {
 		for_each_rtd_cpu_dais(rtd, i, cpu_dai) {
 			/*
 			 * Please create DAI widget in the right order
@@ -1267,8 +1280,8 @@ static int sof_widget_parse_tokens(struct snd_soc_component *scomp, struct snd_s
 			struct snd_sof_tuple *new_tuples;
 
 			num_tuples += token_list[object_token_list[i]].count * (num_sets - 1);
-			new_tuples = krealloc(swidget->tuples,
-					      sizeof(*new_tuples) * num_tuples, GFP_KERNEL);
+			new_tuples = krealloc_array(swidget->tuples,
+						    num_tuples, sizeof(*new_tuples), GFP_KERNEL);
 			if (!new_tuples) {
 				ret = -ENOMEM;
 				goto err;

@@ -258,7 +258,7 @@ static void workingset_refault_track(struct lruvec *lruvec, unsigned long refaul
 }
 #endif
 
-static inline struct mem_cgroup *try_get_flush_memcg(int memcgid)
+static inline struct mem_cgroup *try_get_flush_memcg(int memcgid, bool flush)
 {
 	struct mem_cgroup *memcg;
 
@@ -292,7 +292,8 @@ static inline struct mem_cgroup *try_get_flush_memcg(int memcgid)
 	 * XXX: With per-memcg flushing and thresholding, is ratelimiting
 	 * still needed here?
 	 */
-	mem_cgroup_flush_stats_ratelimited(memcg);
+	if (flush)
+		mem_cgroup_flush_stats_ratelimited(memcg);
 
 	return memcg;
 }
@@ -459,7 +460,7 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 	unsigned long refault_distance, protect_tier;
 
 	unpack_shadow(shadow, &memcgid, &pgdat, &token, &workingset);
-	memcg = try_get_flush_memcg(memcgid);
+	memcg = try_get_flush_memcg(memcgid, true);
 	if (!memcg)
 		return;
 
@@ -599,11 +600,13 @@ void *workingset_eviction(struct folio *folio, struct mem_cgroup *target_memcg)
  * @file: whether the corresponding folio is from the file lru.
  * @workingset: where the workingset value unpacked from shadow should
  * be stored.
- * @tracking: whether do workingset tracking or not
+ * @flush: whether to flush cgroup rstat.
+ * @tracking: whether to do workingset tracking.
  *
  * Return: true if the shadow is for a recently evicted folio; false otherwise.
  */
-bool workingset_test_recent(void *shadow, bool file, bool *workingset, bool tracking)
+static bool __workingset_test_recent(void *shadow, bool file, bool *workingset,
+				     bool flush, bool tracking)
 {
 	struct mem_cgroup *eviction_memcg;
 	struct lruvec *eviction_lruvec;
@@ -632,16 +635,9 @@ bool workingset_test_recent(void *shadow, bool file, bool *workingset, bool trac
 	 * would be better if the root_mem_cgroup existed in all
 	 * configurations instead.
 	 */
-	eviction_memcg = try_get_flush_memcg(memcgid);
+	eviction_memcg = try_get_flush_memcg(memcgid, flush);
 	if (!eviction_memcg)
 		return false;
-
-	/*
-	 * Flush stats (and potentially sleep) outside the RCU read section.
-	 * XXX: With per-memcg flushing and thresholding, is ratelimiting
-	 * still needed here?
-	 */
-	mem_cgroup_flush_stats_ratelimited(eviction_memcg);
 	eviction_lruvec = mem_cgroup_lruvec(eviction_memcg, pgdat);
 
 	if (lru_gen_enabled()) {
@@ -682,6 +678,12 @@ bool workingset_test_recent(void *shadow, bool file, bool *workingset, bool trac
 	 * active pages with one time refaulted page may not be a good idea.
 	 */
 	return refault_distance < min(active, inactive);
+}
+
+bool workingset_test_recent(void *shadow, bool file, bool *workingset,
+				bool flush)
+{
+	return __workingset_test_recent(shadow, file, workingset, flush, false);
 }
 
 /**
@@ -725,7 +727,7 @@ void workingset_refault(struct folio *folio, void *shadow)
 
 	mod_lruvec_state(lruvec, WORKINGSET_REFAULT_BASE + file, nr);
 
-	if (!workingset_test_recent(shadow, file, &workingset, true))
+	if (!__workingset_test_recent(shadow, file, &workingset, true, true))
 		return;
 
 	folio_set_active(folio);
@@ -741,6 +743,30 @@ void workingset_refault(struct folio *folio, void *shadow)
 		lru_note_cost_refault(folio);
 		mod_lruvec_state(lruvec, WORKINGSET_RESTORE_BASE + file, nr);
 	}
+}
+
+/**
+ * workingset_activation - note a page activation
+ * @folio: Folio that is being activated.
+ */
+void workingset_activation(struct folio *folio)
+{
+	struct mem_cgroup *memcg;
+
+	rcu_read_lock();
+	/*
+	 * Filter non-memcg pages here, e.g. unmap can call
+	 * mark_page_accessed() on VDSO pages.
+	 *
+	 * XXX: See workingset_refault() - this should return
+	 * root_mem_cgroup even for !CONFIG_MEMCG.
+	 */
+	memcg = folio_memcg_rcu(folio);
+	if (!mem_cgroup_disabled() && !memcg)
+		goto out;
+	workingset_age_nonresident(folio_lruvec(folio), folio_nr_pages(folio));
+out:
+	rcu_read_unlock();
 }
 
 /*

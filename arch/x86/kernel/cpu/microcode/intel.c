@@ -319,12 +319,6 @@ static enum ucode_state __apply_microcode(struct ucode_cpu_info *uci,
 		return UCODE_OK;
 	}
 
-	/*
-	 * Writeback and invalidate caches before updating microcode to avoid
-	 * internal issues depending on what the microcode is updating.
-	 */
-	native_wbinvd();
-
 	/* write microcode via MSR 0x79 */
 	native_wrmsrl(MSR_IA32_UCODE_WRITE, (unsigned long)mc->bits);
 
@@ -339,16 +333,9 @@ static enum ucode_state __apply_microcode(struct ucode_cpu_info *uci,
 static enum ucode_state apply_microcode_early(struct ucode_cpu_info *uci)
 {
 	struct microcode_intel *mc = uci->mc;
-	enum ucode_state ret;
-	u32 cur_rev, date;
+	u32 cur_rev;
 
-	ret = __apply_microcode(uci, mc, &cur_rev);
-	if (ret == UCODE_UPDATED) {
-		date = mc->hdr.date;
-		pr_info_once("updated early: 0x%x -> 0x%x, date = %04x-%02x-%02x\n",
-			     cur_rev, mc->hdr.rev, date & 0xffff, date >> 24, (date >> 16) & 0xff);
-	}
-	return ret;
+	return __apply_microcode(uci, mc, &cur_rev);
 }
 
 static __init bool load_builtin_intel_microcode(struct cpio_data *cp)
@@ -377,13 +364,13 @@ static __init struct microcode_intel *get_microcode_blob(struct ucode_cpu_info *
 {
 	struct cpio_data cp;
 
+	intel_collect_cpu_info(&uci->cpu_sig);
+
 	if (!load_builtin_intel_microcode(&cp))
 		cp = find_microcode_in_initrd(ucode_path);
 
 	if (!(cp.data && cp.size))
 		return NULL;
-
-	intel_collect_cpu_info(&uci->cpu_sig);
 
 	return scan_microcode(cp.data, cp.size, uci, save);
 }
@@ -402,7 +389,7 @@ static int __init save_builtin_microcode(void)
 	if (xchg(&ucode_patch_va, NULL) != UCODE_BSP_LOADED)
 		return 0;
 
-	if (dis_ucode_ldr || boot_cpu_data.x86_vendor != X86_VENDOR_INTEL)
+	if (microcode_loader_disabled() || boot_cpu_data.x86_vendor != X86_VENDOR_INTEL)
 		return 0;
 
 	uci.mc = get_microcode_blob(&uci, true);
@@ -413,13 +400,17 @@ static int __init save_builtin_microcode(void)
 early_initcall(save_builtin_microcode);
 
 /* Load microcode on BSP from initrd or builtin blobs */
-void __init load_ucode_intel_bsp(void)
+void __init load_ucode_intel_bsp(struct early_load_data *ed)
 {
 	struct ucode_cpu_info uci;
 
 	uci.mc = get_microcode_blob(&uci, false);
-	if (uci.mc && apply_microcode_early(&uci) == UCODE_UPDATED)
+	ed->old_rev = uci.cpu_sig.rev;
+
+	if (uci.mc && apply_microcode_early(&uci) == UCODE_UPDATED) {
 		ucode_patch_va = UCODE_BSP_LOADED;
+		ed->new_rev = uci.cpu_sig.rev;
+	}
 }
 
 void load_ucode_intel_ap(void)
@@ -583,7 +574,7 @@ static bool is_blacklisted(unsigned int cpu)
 	/*
 	 * Late loading on model 79 with microcode revision less than 0x0b000021
 	 * and LLC size per core bigger than 2.5MB may result in a system hang.
-	 * This behavior is documented in item BDF90, #334165 (Intel Xeon
+	 * This behavior is documented in item BDX90, #334165 (Intel Xeon
 	 * Processor E7-8800/4800 v4 Product Family).
 	 */
 	if (c->x86 == 6 &&
@@ -591,7 +582,7 @@ static bool is_blacklisted(unsigned int cpu)
 	    c->x86_stepping == 0x01 &&
 	    llc_size_per_core > 2621440 &&
 	    c->microcode < 0x0b000021) {
-		pr_err_once("Erratum BDF90: late loading with revision < 0x0b000021 (0x%x) disabled.\n", c->microcode);
+		pr_err_once("Erratum BDX90: late loading with revision < 0x0b000021 (0x%x) disabled.\n", c->microcode);
 		pr_err_once("Please consider either early loading through initrd/built-in or a potential BIOS update.\n");
 		return true;
 	}

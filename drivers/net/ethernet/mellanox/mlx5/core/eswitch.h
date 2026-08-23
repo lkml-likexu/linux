@@ -311,10 +311,13 @@ struct esw_mc_addr { /* SRIOV only */
 struct mlx5_host_work {
 	struct work_struct	work;
 	struct mlx5_eswitch	*esw;
+	int			work_gen;
 };
 
 struct mlx5_esw_functions {
 	struct mlx5_nb		nb;
+	atomic_t		generation;
+	bool			host_funcs_disabled;
 	u16			num_vfs;
 	u16			num_ec_vfs;
 };
@@ -712,6 +715,9 @@ void mlx5e_tc_clean_fdb_peer_flows(struct mlx5_eswitch *esw);
 			  MLX5_CAP_GEN_2((esw->dev), ec_vf_vport_base),	\
 			  MLX5_CAP_GEN_2((esw->dev), ec_vf_vport_base) +\
 			  (last) - 1)
+
+#define mlx5_esw_for_each_rep(esw, i, rep) \
+	xa_for_each(&((esw)->offloads.vport_reps), i, rep)
 
 struct mlx5_eswitch *__must_check
 mlx5_devlink_eswitch_get(struct devlink *devlink);

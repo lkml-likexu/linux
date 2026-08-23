@@ -47,7 +47,7 @@
 #include <net/af_unix.h>
 #endif
 
-#define TCPUDP_MIB_MAX max_t(u32, UDP_MIB_MAX, TCP_MIB_MAX)
+#define TCPUDP_MIB_MAX MAX_T(u32, UDP_MIB_MAX, TCP_MIB_MAX)
 
 extern struct proto netlink_proto;
 

@@ -273,7 +273,8 @@ struct ext4_system_blocks {
 /*
  * Flags for ext4_io_end->flags
  */
-#define	EXT4_IO_END_UNWRITTEN	0x0001
+#define EXT4_IO_END_UNWRITTEN	0x0001
+#define EXT4_IO_END_FAILED	0x0002
 
 struct ext4_io_end_vec {
 	struct list_head list;		/* list of io_end_vec */
@@ -891,10 +892,13 @@ do {										\
 		(raw_inode)->xtime = cpu_to_le32(clamp_t(int32_t, (ts).tv_sec, S32_MIN, S32_MAX));	\
 } while (0)
 
-#define EXT4_INODE_SET_XTIME(xtime, inode, raw_inode)				\
-	EXT4_INODE_SET_XTIME_VAL(xtime, inode, raw_inode, (inode)->xtime)
+#define EXT4_INODE_SET_ATIME(inode, raw_inode)						\
+	EXT4_INODE_SET_XTIME_VAL(i_atime, inode, raw_inode, inode_get_atime(inode))
 
-#define EXT4_INODE_SET_CTIME(inode, raw_inode)					\
+#define EXT4_INODE_SET_MTIME(inode, raw_inode)						\
+	EXT4_INODE_SET_XTIME_VAL(i_mtime, inode, raw_inode, inode_get_mtime(inode))
+
+#define EXT4_INODE_SET_CTIME(inode, raw_inode)						\
 	EXT4_INODE_SET_XTIME_VAL(i_ctime, inode, raw_inode, inode_get_ctime(inode))
 
 #define EXT4_EINODE_SET_XTIME(xtime, einode, raw_inode)				\
@@ -910,9 +914,16 @@ do {										\
 			.tv_sec = (signed)le32_to_cpu((raw_inode)->xtime)	\
 		})
 
-#define EXT4_INODE_GET_XTIME(xtime, inode, raw_inode)				\
+#define EXT4_INODE_GET_ATIME(inode, raw_inode)					\
 do {										\
-	(inode)->xtime = EXT4_INODE_GET_XTIME_VAL(xtime, inode, raw_inode);	\
+	inode_set_atime_to_ts(inode,						\
+		EXT4_INODE_GET_XTIME_VAL(i_atime, inode, raw_inode));		\
+} while (0)
+
+#define EXT4_INODE_GET_MTIME(inode, raw_inode)					\
+do {										\
+	inode_set_mtime_to_ts(inode,						\
+		EXT4_INODE_GET_XTIME_VAL(i_mtime, inode, raw_inode));		\
 } while (0)
 
 #define EXT4_INODE_GET_CTIME(inode, raw_inode)					\
@@ -1524,6 +1535,7 @@ struct ext4_sb_info {
 	struct proc_dir_entry *s_proc;
 	struct kobject s_kobj;
 	struct completion s_kobj_unregister;
+	struct mutex s_error_notify_mutex; /* protects sysfs_notify vs kobject_del */
 	struct super_block *s_sb;
 	struct buffer_head *s_mmp_bh;
 
@@ -1948,6 +1960,16 @@ static inline bool ext4_verity_in_progress(struct inode *inode)
 }
 
 #define NEXT_ORPHAN(inode) EXT4_I(inode)->i_dtime
+
+/*
+ * Check whether the inode is tracked as orphan (either in orphan file or
+ * orphan list).
+ */
+static inline bool ext4_inode_orphan_tracked(struct inode *inode)
+{
+	return ext4_test_inode_state(inode, EXT4_STATE_ORPHAN_FILE) ||
+		!list_empty(&EXT4_I(inode)->i_orphan);
+}
 
 /*
  * Codes for operating systems
@@ -2985,6 +3007,8 @@ extern int ext4_inode_attach_jinode(struct inode *inode);
 extern int ext4_can_truncate(struct inode *inode);
 extern int ext4_truncate(struct inode *);
 extern int ext4_break_layouts(struct inode *);
+extern int ext4_truncate_page_cache_block_range(struct inode *inode,
+						loff_t start, loff_t end);
 extern int ext4_punch_hole(struct file *file, loff_t offset, loff_t length);
 extern void ext4_set_inode_flags(struct inode *, bool init);
 extern int ext4_alloc_da_blocks(struct inode *inode);
@@ -3339,6 +3363,13 @@ static inline unsigned int ext4_flex_bg_size(struct ext4_sb_info *sbi)
 	return 1 << sbi->s_log_groups_per_flex;
 }
 
+static inline loff_t ext4_get_maxbytes(struct inode *inode)
+{
+	if (ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS))
+		return inode->i_sb->s_maxbytes;
+	return EXT4_SB(inode->i_sb)->s_bitmap_maxbytes;
+}
+
 #define ext4_std_error(sb, errno)				\
 do {								\
 	if ((errno))						\
@@ -3678,11 +3709,12 @@ extern int ext4_map_blocks(handle_t *handle, struct inode *inode,
 extern int ext4_ext_calc_credits_for_single_extent(struct inode *inode,
 						   int num,
 						   struct ext4_ext_path *path);
-extern int ext4_ext_insert_extent(handle_t *, struct inode *,
-				  struct ext4_ext_path **,
-				  struct ext4_extent *, int);
+extern struct ext4_ext_path *ext4_ext_insert_extent(
+				handle_t *handle, struct inode *inode,
+				struct ext4_ext_path *path,
+				struct ext4_extent *newext, int gb_flags);
 extern struct ext4_ext_path *ext4_find_extent(struct inode *, ext4_lblk_t,
-					      struct ext4_ext_path **,
+					      struct ext4_ext_path *,
 					      int flags);
 extern void ext4_free_ext_path(struct ext4_ext_path *);
 extern int ext4_ext_check_inode(struct inode *inode);

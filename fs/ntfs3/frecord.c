@@ -378,8 +378,10 @@ bool ni_add_subrecord(struct ntfs_inode *ni, CLST rno, struct mft_inode **mi)
 
 	mi_get_ref(&ni->mi, &m->mrec->parent_ref);
 
-	ni_add_mi(ni, m);
-	*mi = m;
+	*mi = ni_ins_mi(ni, &ni->mi_tree, m->rno, &m->node);
+	if (*mi != m)
+		mi_put(m);
+
 	return true;
 }
 
@@ -1067,9 +1069,9 @@ insert_ext:
 
 out2:
 	ni_remove_mi(ni, mi);
-	mi_put(mi);
 
 out1:
+	mi_put(mi);
 	ntfs_mark_rec_free(sbi, rno, is_mft);
 
 out:
@@ -1901,46 +1903,6 @@ enum REPARSE_SIGN ni_parse_reparse(struct ntfs_inode *ni, struct ATTRIB *attr,
 }
 
 /*
- * fiemap_fill_next_extent_k - a copy of fiemap_fill_next_extent
- * but it uses 'fe_k' instead of fieinfo->fi_extents_start
- */
-static int fiemap_fill_next_extent_k(struct fiemap_extent_info *fieinfo,
-				     struct fiemap_extent *fe_k, u64 logical,
-				     u64 phys, u64 len, u32 flags)
-{
-	struct fiemap_extent extent;
-
-	/* only count the extents */
-	if (fieinfo->fi_extents_max == 0) {
-		fieinfo->fi_extents_mapped++;
-		return (flags & FIEMAP_EXTENT_LAST) ? 1 : 0;
-	}
-
-	if (fieinfo->fi_extents_mapped >= fieinfo->fi_extents_max)
-		return 1;
-
-	if (flags & FIEMAP_EXTENT_DELALLOC)
-		flags |= FIEMAP_EXTENT_UNKNOWN;
-	if (flags & FIEMAP_EXTENT_DATA_ENCRYPTED)
-		flags |= FIEMAP_EXTENT_ENCODED;
-	if (flags & (FIEMAP_EXTENT_DATA_TAIL | FIEMAP_EXTENT_DATA_INLINE))
-		flags |= FIEMAP_EXTENT_NOT_ALIGNED;
-
-	memset(&extent, 0, sizeof(extent));
-	extent.fe_logical = logical;
-	extent.fe_physical = phys;
-	extent.fe_length = len;
-	extent.fe_flags = flags;
-
-	memcpy(fe_k + fieinfo->fi_extents_mapped, &extent, sizeof(extent));
-
-	fieinfo->fi_extents_mapped++;
-	if (fieinfo->fi_extents_mapped == fieinfo->fi_extents_max)
-		return 1;
-	return (flags & FIEMAP_EXTENT_LAST) ? 1 : 0;
-}
-
-/*
  * ni_fiemap - Helper for file_fiemap().
  *
  * Assumed ni_lock.
@@ -1950,11 +1912,9 @@ int ni_fiemap(struct ntfs_inode *ni, struct fiemap_extent_info *fieinfo,
 	      __u64 vbo, __u64 len)
 {
 	int err = 0;
-	struct fiemap_extent *fe_k = NULL;
 	struct ntfs_sb_info *sbi = ni->mi.sbi;
 	u8 cluster_bits = sbi->cluster_bits;
-	struct runs_tree *run;
-	struct rw_semaphore *run_lock;
+	struct runs_tree run;
 	struct ATTRIB *attr;
 	CLST vcn = vbo >> cluster_bits;
 	CLST lcn, clen;
@@ -1965,13 +1925,11 @@ int ni_fiemap(struct ntfs_inode *ni, struct fiemap_extent_info *fieinfo,
 	u32 flags;
 	bool ok;
 
+	run_init(&run);
 	if (S_ISDIR(ni->vfs_inode.i_mode)) {
-		run = &ni->dir.alloc_run;
 		attr = ni_find_attr(ni, NULL, NULL, ATTR_ALLOC, I30_NAME,
 				    ARRAY_SIZE(I30_NAME), NULL, NULL);
-		run_lock = &ni->dir.run_lock;
 	} else {
-		run = &ni->file.run;
 		attr = ni_find_attr(ni, NULL, NULL, ATTR_DATA, NULL, 0, NULL,
 				    NULL);
 		if (!attr) {
@@ -1986,7 +1944,6 @@ int ni_fiemap(struct ntfs_inode *ni, struct fiemap_extent_info *fieinfo,
 				"fiemap is not supported for compressed file (cp -r)");
 			goto out;
 		}
-		run_lock = &ni->file.run_lock;
 	}
 
 	if (!attr || !attr->non_res) {
@@ -1998,51 +1955,33 @@ int ni_fiemap(struct ntfs_inode *ni, struct fiemap_extent_info *fieinfo,
 		goto out;
 	}
 
-	/*
-	 * To avoid lock problems replace pointer to user memory by pointer to kernel memory.
-	 */
-	fe_k = kmalloc_array(fieinfo->fi_extents_max,
-			     sizeof(struct fiemap_extent),
-			     GFP_NOFS | __GFP_ZERO);
-	if (!fe_k) {
-		err = -ENOMEM;
-		goto out;
-	}
-
 	end = vbo + len;
 	alloc_size = le64_to_cpu(attr->nres.alloc_size);
 	if (end > alloc_size)
 		end = alloc_size;
 
-	down_read(run_lock);
 
 	while (vbo < end) {
 		if (idx == -1) {
-			ok = run_lookup_entry(run, vcn, &lcn, &clen, &idx);
+			ok = run_lookup_entry(&run, vcn, &lcn, &clen, &idx);
 		} else {
 			CLST vcn_next = vcn;
 
-			ok = run_get_entry(run, ++idx, &vcn, &lcn, &clen) &&
+			ok = run_get_entry(&run, ++idx, &vcn, &lcn, &clen) &&
 			     vcn == vcn_next;
 			if (!ok)
 				vcn = vcn_next;
 		}
 
 		if (!ok) {
-			up_read(run_lock);
-			down_write(run_lock);
-
 			err = attr_load_runs_vcn(ni, attr->type,
 						 attr_name(attr),
-						 attr->name_len, run, vcn);
-
-			up_write(run_lock);
-			down_read(run_lock);
+						 attr->name_len, &run, vcn);
 
 			if (err)
 				break;
 
-			ok = run_lookup_entry(run, vcn, &lcn, &clen, &idx);
+			ok = run_lookup_entry(&run, vcn, &lcn, &clen, &idx);
 
 			if (!ok) {
 				err = -EINVAL;
@@ -2067,8 +2006,9 @@ int ni_fiemap(struct ntfs_inode *ni, struct fiemap_extent_info *fieinfo,
 		} else if (is_attr_compressed(attr)) {
 			CLST clst_data;
 
-			err = attr_is_frame_compressed(
-				ni, attr, vcn >> attr->nres.c_unit, &clst_data);
+			err = attr_is_frame_compressed(ni, attr,
+						       vcn >> attr->nres.c_unit,
+						       &clst_data, &run);
 			if (err)
 				break;
 			if (clst_data < NTFS_LZNT_CLUSTERS)
@@ -2097,8 +2037,8 @@ int ni_fiemap(struct ntfs_inode *ni, struct fiemap_extent_info *fieinfo,
 			if (vbo + dlen >= end)
 				flags |= FIEMAP_EXTENT_LAST;
 
-			err = fiemap_fill_next_extent_k(fieinfo, fe_k, vbo, lbo,
-							dlen, flags);
+			err = fiemap_fill_next_extent(fieinfo, vbo, lbo, dlen,
+						      flags);
 
 			if (err < 0)
 				break;
@@ -2119,8 +2059,7 @@ int ni_fiemap(struct ntfs_inode *ni, struct fiemap_extent_info *fieinfo,
 		if (vbo + bytes >= end)
 			flags |= FIEMAP_EXTENT_LAST;
 
-		err = fiemap_fill_next_extent_k(fieinfo, fe_k, vbo, lbo, bytes,
-						flags);
+		err = fiemap_fill_next_extent(fieinfo, vbo, lbo, bytes, flags);
 		if (err < 0)
 			break;
 		if (err == 1) {
@@ -2131,20 +2070,32 @@ int ni_fiemap(struct ntfs_inode *ni, struct fiemap_extent_info *fieinfo,
 		vbo += bytes;
 	}
 
-	up_read(run_lock);
-
-	/*
-	 * Copy to user memory out of lock
-	 */
-	if (copy_to_user(fieinfo->fi_extents_start, fe_k,
-			 fieinfo->fi_extents_max *
-				 sizeof(struct fiemap_extent))) {
-		err = -EFAULT;
-	}
-
 out:
-	kfree(fe_k);
+	run_close(&run);
 	return err;
+}
+
+static struct page *ntfs_lock_new_page(struct address_space *mapping,
+		pgoff_t index, gfp_t gfp)
+{
+	struct folio *folio = __filemap_get_folio(mapping, index,
+			FGP_LOCK | FGP_ACCESSED | FGP_CREAT, gfp);
+	struct page *page;
+
+	if (IS_ERR(folio))
+		return ERR_CAST(folio);
+
+	if (!folio_test_uptodate(folio))
+		return folio_file_page(folio, index);
+
+	/* Use a temporary page to avoid data corruption */
+	folio_unlock(folio);
+	folio_put(folio);
+	page = alloc_page(gfp);
+	if (!page)
+		return ERR_PTR(-ENOMEM);
+	__SetPageLocked(page);
+	return page;
 }
 
 /*
@@ -2200,9 +2151,9 @@ int ni_readpage_cmpr(struct ntfs_inode *ni, struct page *page)
 		if (i == idx)
 			continue;
 
-		pg = find_or_create_page(mapping, index, gfp_mask);
-		if (!pg) {
-			err = -ENOMEM;
+		pg = ntfs_lock_new_page(mapping, index, gfp_mask);
+		if (IS_ERR(pg)) {
+			err = PTR_ERR(pg);
 			goto out1;
 		}
 		pages[i] = pg;
@@ -2304,13 +2255,13 @@ int ni_decompress_file(struct ntfs_inode *ni)
 		for (i = 0; i < pages_per_frame; i++, index++) {
 			struct page *pg;
 
-			pg = find_or_create_page(mapping, index, gfp_mask);
-			if (!pg) {
+			pg = ntfs_lock_new_page(mapping, index, gfp_mask);
+			if (IS_ERR(pg)) {
 				while (i--) {
 					unlock_page(pages[i]);
 					put_page(pages[i]);
 				}
-				err = -ENOMEM;
+				err = PTR_ERR(pg);
 				goto out;
 			}
 			pages[i] = pg;
@@ -2674,7 +2625,8 @@ int ni_read_frame(struct ntfs_inode *ni, u64 frame_vbo, struct page **pages,
 		down_write(&ni->file.run_lock);
 		run_truncate_around(run, le64_to_cpu(attr->nres.svcn));
 		frame = frame_vbo >> (cluster_bits + NTFS_LZNT_CUNIT);
-		err = attr_is_frame_compressed(ni, attr, frame, &clst_data);
+		err = attr_is_frame_compressed(ni, attr, frame, &clst_data,
+					       run);
 		up_write(&ni->file.run_lock);
 		if (err)
 			goto out1;
@@ -3131,8 +3083,7 @@ int ni_add_name(struct ntfs_inode *dir_ni, struct ntfs_inode *ni,
  * ni_rename - Remove one name and insert new name.
  */
 int ni_rename(struct ntfs_inode *dir_ni, struct ntfs_inode *new_dir_ni,
-	      struct ntfs_inode *ni, struct NTFS_DE *de, struct NTFS_DE *new_de,
-	      bool *is_bad)
+	      struct ntfs_inode *ni, struct NTFS_DE *de, struct NTFS_DE *new_de)
 {
 	int err;
 	struct NTFS_DE *de2 = NULL;
@@ -3155,8 +3106,8 @@ int ni_rename(struct ntfs_inode *dir_ni, struct ntfs_inode *new_dir_ni,
 	err = ni_add_name(new_dir_ni, ni, new_de);
 	if (!err) {
 		err = ni_remove_name(dir_ni, ni, de, &de2, &undo);
-		if (err && ni_remove_name(new_dir_ni, ni, new_de, &de2, &undo))
-			*is_bad = true;
+		WARN_ON(err && ni_remove_name(new_dir_ni, ni, new_de, &de2,
+			&undo));
 	}
 
 	/*
@@ -3192,6 +3143,57 @@ bool ni_is_dirty(struct inode *inode)
 	}
 
 	return false;
+}
+
+/*
+ * ni_write_parents
+ *
+ * Helper function for ntfs_file_fsync.
+ */
+int ni_write_parents(struct ntfs_inode *ni, int sync)
+{
+	int err = 0;
+	struct ATTRIB *attr = NULL;
+	struct ATTR_LIST_ENTRY *le = NULL;
+	struct ntfs_sb_info *sbi = ni->mi.sbi;
+	struct super_block *sb = sbi->sb;
+
+	while ((attr = ni_find_attr(ni, attr, &le, ATTR_NAME, NULL, 0, NULL,
+				    NULL))) {
+		struct inode *dir;
+		struct ATTR_FILE_NAME *fname;
+
+		fname = resident_data_ex(attr, SIZEOF_ATTRIBUTE_FILENAME);
+		if (!fname)
+			continue;
+
+		/* Check simple case when parent inode equals current inode. */
+		if (ino_get(&fname->home) == ni->vfs_inode.i_ino) {
+			if (MFT_REC_ROOT != ni->vfs_inode.i_ino) {
+				ntfs_set_state(sbi, NTFS_DIRTY_ERROR);
+				err = -EINVAL;
+			}
+			continue;
+		}
+
+		dir = ntfs_iget5(sb, &fname->home, NULL);
+		if (IS_ERR(dir)) {
+			ntfs_inode_warn(
+				&ni->vfs_inode,
+				"failed to open parent directory r=%lx to write",
+				(long)ino_get(&fname->home));
+			continue;
+		}
+
+		if (!is_bad_inode(dir)) {
+			int err2 = write_inode_now(dir, sync);
+			if (!err)
+				err = err2;
+		}
+		iput(dir);
+	}
+
+	return err;
 }
 
 /*

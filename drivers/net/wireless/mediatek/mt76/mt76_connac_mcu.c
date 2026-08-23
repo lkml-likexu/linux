@@ -66,6 +66,7 @@ int mt76_connac_mcu_init_download(struct mt76_dev *dev, u32 addr, u32 len,
 
 	if ((!is_connac_v1(dev) && addr == MCU_PATCH_ADDRESS) ||
 	    (is_mt7921(dev) && addr == 0x900000) ||
+	    (is_mt7925(dev) && addr == 0x900000) ||
 	    (is_mt7996(dev) && addr == 0x900000))
 		cmd = MCU_CMD(PATCH_START_REQ);
 	else
@@ -1405,6 +1406,8 @@ mt76_connac_mcu_uni_bss_he_tlv(struct mt76_phy *phy, struct ieee80211_vif *vif,
 	struct bss_info_uni_he *he;
 
 	cap = mt76_connac_get_he_phy_cap(phy, vif);
+	if (!cap)
+		return;
 
 	he = (struct bss_info_uni_he *)tlv;
 	he->he_pe_duration = vif->bss_conf.htc_trig_based_pkt_ext;
@@ -2926,6 +2929,17 @@ int mt76_connac_mcu_restart(struct mt76_dev *dev)
 }
 EXPORT_SYMBOL_GPL(mt76_connac_mcu_restart);
 
+int mt76_connac_mcu_del_wtbl_all(struct mt76_dev *dev)
+{
+	struct wtbl_req_hdr req = {
+		.operation = WTBL_RESET_ALL,
+	};
+
+	return mt76_mcu_send_msg(dev, MCU_EXT_CMD(WTBL_UPDATE),
+				 &req, sizeof(req), true);
+}
+EXPORT_SYMBOL_GPL(mt76_connac_mcu_del_wtbl_all);
+
 int mt76_connac_mcu_rdd_cmd(struct mt76_dev *dev, int cmd, u8 index,
 			    u8 rx_sel, u8 val)
 {
@@ -3069,7 +3083,7 @@ static u32 mt76_connac2_get_data_mode(struct mt76_dev *dev, u32 info)
 {
 	u32 mode = DL_MODE_NEED_RSP;
 
-	if (!is_mt7921(dev) || info == PATCH_SEC_NOT_SUPPORT)
+	if ((!is_mt7921(dev) && !is_mt7925(dev)) || info == PATCH_SEC_NOT_SUPPORT)
 		return mode;
 
 	switch (FIELD_GET(PATCH_SEC_ENC_TYPE_MASK, info)) {

@@ -50,7 +50,8 @@ static void hfs_write_failed(struct address_space *mapping, loff_t to)
 }
 
 int hfs_write_begin(struct file *file, struct address_space *mapping,
-		loff_t pos, unsigned len, struct page **pagep, void **fsdata)
+		loff_t pos, unsigned int len, struct page **pagep,
+		void **fsdata)
 {
 	int ret;
 
@@ -697,6 +698,7 @@ static const struct file_operations hfs_file_operations = {
 	.write_iter	= generic_file_write_iter,
 	.mmap		= generic_file_mmap,
 	.splice_read	= filemap_splice_read,
+	.splice_write	= iter_file_splice_write,
 	.fsync		= hfs_file_fsync,
 	.open		= hfs_file_open,
 	.release	= hfs_file_release,

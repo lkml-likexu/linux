@@ -33,7 +33,7 @@ void machine_halt(void)
 	console_flush_on_panic(CONSOLE_FLUSH_PENDING);
 
 	while (true) {
-		__arch_cpu_idle();
+		__asm__ __volatile__("idle 0" : : : "memory");
 	}
 }
 
@@ -54,7 +54,7 @@ void machine_power_off(void)
 #endif
 
 	while (true) {
-		__arch_cpu_idle();
+		__asm__ __volatile__("idle 0" : : : "memory");
 	}
 }
 
@@ -75,6 +75,6 @@ void machine_restart(char *command)
 		acpi_reboot();
 
 	while (true) {
-		__arch_cpu_idle();
+		__asm__ __volatile__("idle 0" : : : "memory");
 	}
 }

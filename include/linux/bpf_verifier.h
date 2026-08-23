@@ -322,6 +322,10 @@ struct bpf_func_state {
 struct bpf_idx_pair {
 	u32 prev_idx;
 	u32 idx;
+	/* additional registers that need precision tracking when this
+	 * jump is backtracked, vector of six 10-bit records
+	 */
+	u64 linked_regs;
 };
 
 #define MAX_CALL_FRAMES 8
@@ -576,6 +580,7 @@ struct bpf_subprog_info {
 	bool tail_call_reachable;
 	bool has_ld_abs;
 	bool is_async_cb;
+	bool changes_pkt_data;
 };
 
 struct bpf_verifier_env;
