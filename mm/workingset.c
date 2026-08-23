@@ -745,30 +745,6 @@ void workingset_refault(struct folio *folio, void *shadow)
 	}
 }
 
-/**
- * workingset_activation - note a page activation
- * @folio: Folio that is being activated.
- */
-void workingset_activation(struct folio *folio)
-{
-	struct mem_cgroup *memcg;
-
-	rcu_read_lock();
-	/*
-	 * Filter non-memcg pages here, e.g. unmap can call
-	 * mark_page_accessed() on VDSO pages.
-	 *
-	 * XXX: See workingset_refault() - this should return
-	 * root_mem_cgroup even for !CONFIG_MEMCG.
-	 */
-	memcg = folio_memcg_rcu(folio);
-	if (!mem_cgroup_disabled() && !memcg)
-		goto out;
-	workingset_age_nonresident(folio_lruvec(folio), folio_nr_pages(folio));
-out:
-	rcu_read_unlock();
-}
-
 /*
  * Shadow entries reflect the share of the working set that does not
  * fit into memory, so their number depends on the access pattern of
