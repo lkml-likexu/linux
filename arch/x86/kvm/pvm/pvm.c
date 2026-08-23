@@ -2800,8 +2800,9 @@ static inline void pvm_load_host_xsave_state(struct kvm_vcpu *vcpu)
 	}
 }
 
-static fastpath_t pvm_vcpu_run(struct kvm_vcpu *vcpu, bool force_immediate_exit)
+static fastpath_t pvm_vcpu_run(struct kvm_vcpu *vcpu, u64 run_flags)
 {
+	bool force_immediate_exit = run_flags & KVM_RUN_FORCE_IMMEDIATE_EXIT;
 	struct vcpu_pvm *pvm = to_pvm(vcpu);
 	bool is_smod_befor_run = is_smod(pvm);
 
