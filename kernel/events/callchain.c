@@ -257,6 +257,9 @@ get_perf_callchain(struct pt_regs *regs, u32 init_nr, bool kernel, bool user,
 		}
 	}
 
+#ifdef CONFIG_GUEST_PERF_EVENTS_CALLCHAIN
+exit_put:
+#endif /* CONFIG_GUEST_PERF_EVENTS_CALLCHAIN */
 	put_callchain_entry(rctx);
 
 	return entry;
