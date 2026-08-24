@@ -103,13 +103,9 @@ $(error Invalid CONFIG value '$(CONFIG)', no matching config target found)
 endif
 
 ### RPM build options
-# All params enabled by default (except kABI check, see below), ENABLED overrides DEFAULT_DISABLE.
-DISABLED = $(DEFAULT_DISABLED)
+# All params enabled by default (except kABI check and OFED, see below), ENABLED overrides DEFAULT_DISABLE.
+DISABLED = ofed $(DEFAULT_DISABLED)
 ENABLED = $(DEFAULT_ENABLED)
-# Automatically disable non core package for non standard build, such as eks/cloudgame
-ifneq ($(CONFIG),generic-release)
-override DISABLED := ofed $(DISABLED)
-endif
 # generic-debug only build kernel rpm, disable other rpms
 ifeq ($(CONFIG),generic-debug)
 override DISABLED := bpftool perf tools headers keypkg doc $(DISABLED)
