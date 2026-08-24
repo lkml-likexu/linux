@@ -122,12 +122,16 @@ SYM_CODE_START_LOCAL(pvh_start_xen)
 	UNWIND_HINT_END_OF_STACK
 	ANNOTATE_NOENDBR // above
 #endif
+#ifdef CONFIG_PVM_GUEST
+	call xen_prepare_pvh
+#else
 	/* Call xen_prepare_pvh() via the kernel virtual mapping */
 	leaq xen_prepare_pvh(%rip), %rax
 	subq phys_base(%rip), %rax
 	addq $__START_KERNEL_map, %rax
 	ANNOTATE_RETPOLINE_SAFE
 	call *%rax
+#endif
 
 	/* startup_64 expects boot_params in %rsi. */
 	mov $_pa(pvh_bootparams), %rsi
